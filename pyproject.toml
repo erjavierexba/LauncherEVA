@@ -3,10 +3,26 @@ name = "launcher-eva"
 version = "0.1.0"
 description = "Panel de control para EVA public release"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+  "aiohttp==3.13.5",
+  "firebase-admin==7.2.0",
+  "pygame==2.6.1",
+  "PySide6>=6.7",
+  "pyttsx3==2.99",
+  "requests==2.33.1",
+  "sounddevice==0.5.5",
+  "vosk==0.3.45",
+  "websockets==16.0",
+]
+
+[project.optional-dependencies]
+build = [
+  "PyInstaller>=6.0",
+]
 
 [project.scripts]
 launcher-eva = "launcher_eva.__main__:main"
+launcher-eva-desktop = "launcher_eva.desktop:main"
 
 [build-system]
 requires = ["setuptools>=68"]

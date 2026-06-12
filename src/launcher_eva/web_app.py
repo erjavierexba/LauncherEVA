@@ -13,8 +13,11 @@ import tempfile
 import threading
 import time
 import unicodedata
+import urllib.request
 import webbrowser
+import zipfile
 import socket
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +28,10 @@ APP_TITLE = "Launcher EVA"
 PUBLIC_BRANCH = "public_release"
 CONFIG_FILE = "launcher.config.json"
 PORT = 8787
+SNAPSHOT_ROOT = "managed_releases"
+VOSK_MODEL_DIR = "vosk-model-es-0.42"
+VOSK_MODEL_ZIP = "vosk-model-es-0.42.zip"
+VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-es-0.42.zip"
 
 ALLOWED_MEDIA_EXTENSIONS = {
     ".md",
@@ -92,16 +99,88 @@ def app_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def runtime_assets_root() -> Path:
+    return app_root() / "assets"
+
+
+def runtime_sqlite_path() -> Path:
+    return app_root() / "eva.sqlite3"
+
+
+def runtime_apks_root() -> Path:
+    return app_root() / "apks"
+
+
+def runtime_vendor_root() -> Path:
+    return app_root() / "vendor"
+
+
+def ensure_runtime_layout() -> None:
+    runtime_assets_root().mkdir(parents=True, exist_ok=True)
+    runtime_apks_root().mkdir(parents=True, exist_ok=True)
+
+
+def bundled_root() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    return app_root()
+
+
+def seed_bundled_projects() -> None:
+    source = bundled_root() / "projects"
+    destination = app_root() / "projects"
+    if not getattr(sys, "frozen", False) or not source.exists() or destination.exists():
+        return
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
+        ".git",
+        "__pycache__",
+        "*.pyc",
+    ))
+
+
+def seed_bundled_vendor() -> None:
+    source = bundled_root() / "vendor"
+    destination = runtime_vendor_root()
+    if not getattr(sys, "frozen", False) or not source.exists() or destination.exists():
+        return
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
+        "__pycache__",
+        "*.pyc",
+    ))
+    ensure_vendor_executable_bits(destination)
+
+
+def ensure_vendor_executable_bits(vendor_root: Path) -> None:
+    if os.name == "nt" or not vendor_root.exists():
+        return
+    executable_dirs = [
+        vendor_root / "node" / "bin",
+        vendor_root / "jdk" / "bin",
+        vendor_root / "android-sdk" / "cmdline-tools" / "latest" / "bin",
+        vendor_root / "android-sdk" / "platform-tools",
+        vendor_root / "android-sdk" / "build-tools",
+    ]
+    for directory in executable_dirs:
+        if not directory.exists():
+            continue
+        for path in directory.rglob("*"):
+            if path.is_file():
+                try:
+                    path.chmod(path.stat().st_mode | 0o755)
+                except OSError:
+                    pass
+
+
 def default_settings() -> dict:
-    roles_root = app_root().parent
+    projects_root = app_root() / "projects"
     return {
         "role_name": "Horus",
         "app_subtitle": "EVA mantiene el vinculo abierto",
         "android_package": "com.eva.horus",
         "firebase_service_account_path": "",
         "google_services_path": "",
-        "eva_path": str(roles_root / "Asistente EVA"),
-        "horus_path": str(roles_root / "Proyecto_Horus" / "horus"),
+        "eva_path": str(projects_root / "Asistente EVA"),
+        "horus_path": str(projects_root / "horus"),
         "eva_remote": "",
         "horus_remote": "",
         "web_port": "8080",
@@ -191,6 +270,10 @@ def render_theme_input(key: str, value: str) -> str:
 
 class LauncherState:
     def __init__(self):
+        seed_bundled_projects()
+        seed_bundled_vendor()
+        ensure_vendor_executable_bits(runtime_vendor_root())
+        ensure_runtime_layout()
         self.settings_path = app_root() / CONFIG_FILE
         self.settings = default_settings()
         loaded = load_json(self.settings_path, {})
@@ -239,7 +322,7 @@ class LauncherState:
         return self.eva_path() / "config" / "eva.config.json"
 
     def media_root(self) -> Path:
-        return self.eva_path() / "media"
+        return runtime_assets_root()
 
     def aliases_path(self) -> Path:
         return self.media_root() / "aliases.json"
@@ -256,6 +339,31 @@ class LauncherState:
     def save_eva_config(self, data: dict) -> None:
         save_json(self.eva_config_path(), data)
 
+    def command_environment(self) -> dict[str, str]:
+        env = os.environ.copy()
+        vendor_root = runtime_vendor_root()
+        path_parts = []
+        for candidate in [
+            vendor_root / "node" / "bin",
+            vendor_root / "jdk" / "bin",
+            vendor_root / "android-sdk" / "cmdline-tools" / "latest" / "bin",
+            vendor_root / "android-sdk" / "platform-tools",
+        ]:
+            if candidate.exists():
+                path_parts.append(str(candidate))
+        if path_parts:
+            env["PATH"] = os.pathsep.join([*path_parts, env.get("PATH", "")])
+        if (vendor_root / "jdk").exists():
+            env["JAVA_HOME"] = str(vendor_root / "jdk")
+        if (vendor_root / "android-sdk").exists():
+            env["ANDROID_HOME"] = str(vendor_root / "android-sdk")
+            env["ANDROID_SDK_ROOT"] = str(vendor_root / "android-sdk")
+            env["ANDROID_USER_HOME"] = str(app_root() / ".android")
+        env["GRADLE_USER_HOME"] = str(app_root() / ".gradle")
+        env["EVA_DB_PATH"] = str(runtime_sqlite_path())
+        env["EVA_MEDIA_ROOT"] = str(runtime_assets_root())
+        return env
+
     def run_command(self, command: list[str], cwd: Path, label: str) -> int:
         self.log(f"$ {' '.join(command)} [{cwd}]")
         try:
@@ -267,6 +375,7 @@ class LauncherState:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=self.command_environment(),
             )
         except OSError as error:
             self.log(f"[{label}] No se pudo ejecutar: {error}")
@@ -278,6 +387,160 @@ class LauncherState:
         code = process.wait()
         self.log(f"[{label}] terminado con código {code}.")
         return code
+
+    def capture_command(self, command: list[str], cwd: Path) -> str:
+        try:
+            result = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+        except OSError:
+            return ""
+        return (result.stdout or "").strip()
+
+    def current_release_root(self) -> Path:
+        return app_root() / SNAPSHOT_ROOT / "current"
+
+    def timestamped_release_root(self) -> Path:
+        return app_root() / SNAPSHOT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    def snapshot_ignore(self, directory: str, names: list[str]) -> set[str]:
+        ignored = {
+            ".git",
+            ".venv",
+            "__pycache__",
+            "node_modules",
+            ".expo",
+            "dist",
+            "build",
+            ".gradle",
+            ".kotlin",
+            ".idea",
+            ".vscode",
+            VOSK_MODEL_DIR,
+            VOSK_MODEL_ZIP,
+        }
+        if Path(directory).name in {"android", "ios"}:
+            ignored.update({"build", ".gradle", "local.properties"})
+        return {name for name in names if name in ignored or name.endswith(".pyc")}
+
+    def snapshot_project(self, name: str, source: Path, destination: Path) -> dict:
+        if not source.exists():
+            self.log(f"[{name}] No existe {source}; no puedo crear snapshot.")
+            return {"name": name, "source": source.as_posix(), "error": "missing_source"}
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            shutil.rmtree(destination)
+        shutil.copytree(source, destination, ignore=self.snapshot_ignore)
+
+        branch = self.capture_command(["git", "branch", "--show-current"], source)
+        commit = self.capture_command(["git", "rev-parse", "HEAD"], source)
+        status = self.capture_command(["git", "status", "--short"], source)
+        bundle_path = destination.parent / f"{destination.name}.git.bundle"
+        if (source / ".git").exists():
+            code = self.run_command(["git", "bundle", "create", str(bundle_path), "--all"], source, name)
+            if code != 0:
+                self.log(f"[{name}] No se pudo crear git bundle.")
+
+        metadata = {
+            "name": name,
+            "source": source.as_posix(),
+            "snapshot": destination.as_posix(),
+            "branch": branch,
+            "commit": commit,
+            "dirty": bool(status),
+            "status": status,
+            "gitBundle": bundle_path.as_posix() if bundle_path.exists() else "",
+            "createdAt": datetime.now().isoformat(timespec="seconds"),
+        }
+        save_json(destination / "snapshot.manifest.json", metadata)
+        self.log(f"[{name}] Snapshot creado en {destination}.")
+        return metadata
+
+    def create_safe_snapshots(self) -> None:
+        timestamp_root = self.timestamped_release_root()
+        current_root = self.current_release_root()
+        timestamp_root.mkdir(parents=True, exist_ok=True)
+        current_root.mkdir(parents=True, exist_ok=True)
+
+        eva_metadata = self.snapshot_project("EVA", self.eva_path(), timestamp_root / "Asistente EVA")
+        horus_metadata = self.snapshot_project("Horus", self.horus_path(), timestamp_root / "horus")
+
+        for source_name, target_name in [("Asistente EVA", "Asistente EVA"), ("horus", "horus")]:
+            source = timestamp_root / source_name
+            target = current_root / target_name
+            if target.exists():
+                shutil.rmtree(target)
+            if source.exists():
+                shutil.copytree(source, target)
+
+        for bundle in timestamp_root.glob("*.git.bundle"):
+            shutil.copyfile(bundle, current_root / bundle.name)
+
+        manifest = {
+            "createdAt": datetime.now().isoformat(timespec="seconds"),
+            "eva": eva_metadata,
+            "horus": horus_metadata,
+        }
+        save_json(timestamp_root / "release.manifest.json", manifest)
+        save_json(current_root / "release.manifest.json", manifest)
+        self.log(f"Copia segura actualizada en {current_root}.")
+
+    def ensure_eva_dependencies(self) -> None:
+        eva_path = self.eva_path()
+        if not (eva_path / "requirements.txt").exists():
+            self.log("[EVA] No encuentro requirements.txt; salto dependencias Python.")
+            return
+
+        venv_path = eva_path / ".venv"
+        python_bin = venv_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        if not python_bin.exists():
+            self.run_command([sys.executable, "-m", "venv", str(venv_path)], eva_path, "EVA")
+        executable = str(python_bin if python_bin.exists() else Path(sys.executable))
+        self.run_command([executable, "-m", "pip", "install", "--upgrade", "pip"], eva_path, "EVA")
+        self.run_command([executable, "-m", "pip", "install", "-r", "requirements.txt"], eva_path, "EVA")
+
+    def ensure_vosk_model(self) -> None:
+        eva_path = self.eva_path()
+        model_dir = eva_path / VOSK_MODEL_DIR
+        zip_path = eva_path / VOSK_MODEL_ZIP
+        if model_dir.exists():
+            self.log(f"[EVA] Modelo Vosk ya disponible: {model_dir}.")
+            return
+
+        self.log(f"[EVA] Descargando modelo Vosk desde {VOSK_MODEL_URL}.")
+        try:
+            with urllib.request.urlopen(VOSK_MODEL_URL) as response, zip_path.open("wb") as output:
+                shutil.copyfileobj(response, output)
+        except OSError as error:
+            self.log(f"[EVA] Error descargando Vosk: {error}")
+            return
+
+        self.log("[EVA] Descomprimiendo modelo Vosk.")
+        try:
+            with zipfile.ZipFile(zip_path) as archive:
+                archive.extractall(eva_path)
+        except (OSError, zipfile.BadZipFile) as error:
+            self.log(f"[EVA] Error descomprimiendo Vosk: {error}")
+            return
+        self.log(f"[EVA] Modelo Vosk instalado en {model_dir}.")
+
+    def ensure_horus_dependencies(self) -> None:
+        horus_path = self.horus_path()
+        if not (horus_path / "package.json").exists():
+            self.log("[Horus] No encuentro package.json; salto dependencias Node.")
+            return
+        if (horus_path / "package-lock.json").exists():
+            self.run_command(["npm", "ci"], horus_path, "Horus")
+        else:
+            self.run_command(["npm", "install"], horus_path, "Horus")
+
+    def prepare_public_release_workflow(self) -> None:
+        self.log("Preparando workflow completo de public release.")
+        self.create_safe_snapshots()
+        self.apply_release_configuration()
+        self.ensure_eva_dependencies()
+        self.ensure_vosk_model()
+        self.ensure_horus_dependencies()
+        self.log("Workflow preparado: snapshots, dependencias y Vosk listos.")
 
     def update_repo(self, name: str, path: Path, remote_url: str = "") -> None:
         if not path.exists():
@@ -317,17 +580,22 @@ class LauncherState:
             self.log("No encuentro main.py en la ruta de EVA.")
             return
 
-        venv_python = eva_path / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        executable = str(venv_python if venv_python.exists() else Path(sys.executable))
-        self.log(f"Arrancando EVA con {executable}")
+        if getattr(sys, "frozen", False):
+            command = [str(Path(sys.executable)), "--run-eva", str(eva_path)]
+        else:
+            venv_python = eva_path / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            executable = str(venv_python if venv_python.exists() else Path(sys.executable))
+            command = [executable, "main.py"]
+        self.log(f"Arrancando EVA con {' '.join(command)}")
         self.eva_process = subprocess.Popen(
-            [executable, "main.py"],
+            command,
             cwd=eva_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=self.command_environment(),
         )
         threading.Thread(target=self.pipe_process, args=(self.eva_process,), daemon=True).start()
 
@@ -467,7 +735,7 @@ class LauncherState:
         if Path(original_name).suffix.lower() != ".mp3":
             self.log("La intro debe ser un MP3.")
             return
-        destination = self.eva_path() / "assets" / "music" / "despertar.mp3"
+        destination = runtime_assets_root() / "music" / "despertar.mp3"
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(upload_path, destination)
         self.log("Música de intro actualizada: assets/music/despertar.mp3.")
@@ -502,6 +770,7 @@ class LauncherState:
 
         self.write_horus_app_config(theme)
         self.write_horus_brand()
+        self.write_horus_audio_assets()
         self.write_horus_theme(theme)
         self.prepare_horus_google_services()
         self.log("Configuración propagada a EVA y Horus.")
@@ -521,23 +790,34 @@ class LauncherState:
         return destination.as_posix()
 
     def prepare_horus_google_services(self) -> None:
-        destination = self.horus_path() / "android" / "app" / "google-services.json"
+        destination = self.horus_path() / "google-services.json"
+        legacy_destination = self.horus_path() / "android" / "app" / "google-services.json"
         source_text = self.settings.get("google_services_path", "").strip()
         if not source_text:
             if destination.exists():
                 destination.unlink()
-                self.log("google-services.json eliminado: no hay Firebase de app configurado.")
+            if legacy_destination.exists():
+                legacy_destination.unlink()
+            self.log("google-services.json eliminado: Firebase de app no configurado.")
             return
         source = Path(source_text).expanduser()
         if not source.exists() or not source.is_file():
             self.log(f"google-services.json no encontrado: {source}")
             if destination.exists():
                 destination.unlink()
+            if legacy_destination.exists():
+                legacy_destination.unlink()
             return
         destination.parent.mkdir(parents=True, exist_ok=True)
         if source.resolve() != destination.resolve():
             shutil.copyfile(source, destination)
         self.log("google-services.json configurado para Horus.")
+
+    def horus_firebase_enabled(self) -> bool:
+        source_text = self.settings.get("google_services_path", "").strip()
+        if source_text and Path(source_text).expanduser().is_file():
+            return True
+        return (self.horus_path() / "google-services.json").is_file()
 
     def write_horus_app_config(self, theme: dict) -> None:
         horus_path = self.horus_path()
@@ -570,7 +850,32 @@ class LauncherState:
         android.setdefault("adaptiveIcon", {})["foregroundImage"] = "./assets/adaptive-icon.png"
         if is_hex_color(str(background)):
             android["adaptiveIcon"]["backgroundColor"] = background
+        permissions = [
+            "android.permission.RECORD_AUDIO",
+            "android.permission.MODIFY_AUDIO_SETTINGS",
+        ]
+        if self.horus_firebase_enabled():
+            permissions.append("android.permission.POST_NOTIFICATIONS")
+            android["googleServicesFile"] = "./google-services.json"
+        else:
+            android.pop("googleServicesFile", None)
+        android["permissions"] = permissions
         expo.setdefault("web", {})["favicon"] = "./assets/favicon.png"
+        plugins = expo.get("plugins")
+        if not isinstance(plugins, list):
+            plugins = []
+        plugins = [
+            plugin
+            for plugin in plugins
+            if (
+                plugin if isinstance(plugin, str)
+                else plugin[0] if isinstance(plugin, list) and plugin
+                else ""
+            ) not in {"@react-native-firebase/app", "@react-native-firebase/messaging"}
+        ]
+        if self.horus_firebase_enabled():
+            plugins = ["@react-native-firebase/app", "@react-native-firebase/messaging", *plugins]
+        expo["plugins"] = plugins
         for plugin in expo.get("plugins", []):
             if isinstance(plugin, list) and plugin and plugin[0] == "expo-splash-screen" and isinstance(plugin[1], dict):
                 plugin[1]["image"] = "./assets/icon.png"
@@ -597,6 +902,29 @@ class LauncherState:
             f"  subtitle: {json.dumps(self.app_subtitle(), ensure_ascii=False)},\n"
             f"  audioFeedLabel: {json.dumps(f'{display_name} AUDIO FEED', ensure_ascii=False)},\n"
             f"  videoFeedLabel: {json.dumps(f'TRANSMISION {display_name}', ensure_ascii=False)},\n"
+            "} as const;\n",
+            encoding="utf-8",
+        )
+
+    def write_horus_audio_assets(self) -> None:
+        config_path = self.horus_path() / "src" / "config" / "audioAssets.ts"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        assets = {
+            "login": self.horus_path() / "assets" / "audio" / "login.mp3",
+            "menu": self.horus_path() / "assets" / "audio" / "menu.mp3",
+        }
+
+        def asset_value(path: Path) -> str:
+            if not path.exists():
+                return "null"
+            relative = os.path.relpath(path, config_path.parent).replace(os.sep, "/")
+            return f"require({json.dumps(relative)})"
+
+        config_path.write_text(
+            "// Generado por Launcher EVA.\n\n"
+            "export const HORUS_AUDIO_ASSETS = {\n"
+            f"  login: {asset_value(assets['login'])},\n"
+            f"  menu: {asset_value(assets['menu'])},\n"
             "} as const;\n",
             encoding="utf-8",
         )
@@ -676,6 +1004,28 @@ class LauncherState:
         shutil.copyfile(upload_path, destination)
         self.log(f"Asset Horus actualizado: assets/{asset_name}.")
 
+    def set_horus_audio(self, upload_path: Path, original_name: str, target: str) -> None:
+        if target not in {"login", "menu"}:
+            self.log("Audio Horus ignorado: destino desconocido.")
+            return
+        if Path(original_name).suffix.lower() != ".mp3":
+            self.log("El audio de Horus debe ser MP3.")
+            return
+        destination = self.horus_path() / "assets" / "audio" / f"{target}.mp3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(upload_path, destination)
+        self.write_horus_audio_assets()
+        self.log(f"Audio Horus actualizado: assets/audio/{target}.mp3.")
+
+    def delete_horus_audio(self, target: str) -> None:
+        if target not in {"login", "menu"}:
+            self.log("Audio Horus ignorado: destino desconocido.")
+            return
+        destination = self.horus_path() / "assets" / "audio" / f"{target}.mp3"
+        destination.unlink(missing_ok=True)
+        self.write_horus_audio_assets()
+        self.log(f"Audio Horus eliminado: {target}.")
+
     def set_firebase_file(self, upload_path: Path, original_name: str, target: str) -> None:
         if Path(original_name).suffix.lower() != ".json":
             self.log("Firebase debe configurarse con archivos JSON.")
@@ -697,7 +1047,28 @@ class LauncherState:
     def build_horus_release(self) -> None:
         self.apply_release_configuration()
         self.run_command(["npm", "run", "test"], self.horus_path(), "Horus")
-        self.run_command(["npm", "run", "build:release"], self.horus_path(), "Horus")
+        code = self.run_command(["npm", "run", "build:release"], self.horus_path(), "Horus")
+        if code == 0:
+            self.collect_horus_apks()
+
+    def collect_horus_apks(self) -> None:
+        outputs = self.horus_path() / "android" / "app" / "build" / "outputs"
+        destination_root = runtime_apks_root() / "horus"
+        destination_root.mkdir(parents=True, exist_ok=True)
+
+        if not outputs.exists():
+            self.log("[Horus] No encuentro outputs de Gradle para copiar APKs.")
+            return
+
+        copied = 0
+        for source in outputs.rglob("*.apk"):
+            destination = destination_root / source.name
+            shutil.copyfile(source, destination)
+            copied += 1
+            self.log(f"[Horus] APK copiada: {destination}.")
+
+        if copied == 0:
+            self.log("[Horus] Build completado, pero no encontré APKs.")
 
 
 STATE = LauncherState()
@@ -716,7 +1087,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path in {"/media/upload", "/intro/upload", "/horus/assets", "/firebase/upload"}:
+        if path in {"/media/upload", "/intro/upload", "/horus/assets", "/horus/audio", "/firebase/upload"}:
             form, files = self.multipart()
         else:
             form = self.form()
@@ -742,6 +1113,8 @@ class Handler(BaseHTTPRequestHandler):
             STATE.apply_preset(form.get("preset", "eva"))
         elif path == "/apply-release":
             STATE.apply_release_configuration()
+        elif path == "/prepare-workflow":
+            background(STATE.prepare_public_release_workflow)
         elif path == "/build/horus":
             background(STATE.build_horus_release)
         elif path == "/players/add":
@@ -768,6 +1141,16 @@ class Handler(BaseHTTPRequestHandler):
                 if upload:
                     STATE.set_horus_asset(upload["path"], upload["filename"], asset_name)
                     upload["path"].unlink(missing_ok=True)
+            STATE.apply_release_configuration()
+        elif path == "/horus/audio":
+            for field in ["login", "menu"]:
+                upload = files.get(field)
+                if upload:
+                    STATE.set_horus_audio(upload["path"], upload["filename"], field)
+                    upload["path"].unlink(missing_ok=True)
+            STATE.apply_release_configuration()
+        elif path == "/horus/audio/delete":
+            STATE.delete_horus_audio(form.get("target", ""))
             STATE.apply_release_configuration()
         elif path == "/firebase/upload":
             for field, target in [("service", "service"), ("google", "google")]:
@@ -848,6 +1231,8 @@ def render_page() -> str:
     role_name = settings.get("role_name", "Horus")
     default_package = settings.get("android_package") or f"com.eva.{package_slug(role_name)}"
     eva_running = STATE.eva_process is not None and STATE.eva_process.poll() is None
+    horus_audio_login = STATE.horus_path() / "assets" / "audio" / "login.mp3"
+    horus_audio_menu = STATE.horus_path() / "assets" / "audio" / "menu.mp3"
     log_text = "\n".join(STATE.logs[-180:])
     preset_buttons = "".join(
         f'<button name="preset" value="{h(key)}">{h(value["label"])}</button>'
@@ -933,6 +1318,15 @@ def render_page() -> str:
         <label>Favicon web PNG/JPG<input type="file" name="favicon" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
         <div class="actions"><button>Guardar iconos Horus</button></div>
       </form>
+      <form class="grid" method="post" action="/horus/audio" enctype="multipart/form-data">
+        <label>MP3 login Horus <small>{'Configurado' if horus_audio_login.exists() else 'Sin audio'}</small><input type="file" name="login" accept=".mp3,audio/mpeg"></label>
+        <label>MP3 menú Horus <small>{'Configurado' if horus_audio_menu.exists() else 'Sin audio'}</small><input type="file" name="menu" accept=".mp3,audio/mpeg"></label>
+        <div class="actions span2"><button>Guardar audios Horus</button></div>
+      </form>
+      <form class="actions" method="post" action="/horus/audio/delete">
+        <button name="target" value="login">Quitar audio login</button>
+        <button name="target" value="menu">Quitar audio menú</button>
+      </form>
       <form class="grid" method="post" action="/firebase/upload" enctype="multipart/form-data">
         <label>Service account EVA JSON<input type="file" name="service" accept=".json,application/json"></label>
         <label>google-services app JSON<input type="file" name="google" accept=".json,application/json"></label>
@@ -944,6 +1338,7 @@ def render_page() -> str:
         <button name="target" value="horus">Pull Horus</button>
       </form>
       <form class="actions" method="post" action="/apply-release"><button>Reaplicar configuración</button></form>
+      <form class="actions" method="post" action="/prepare-workflow"><button class="primary">Preparar workflow completo</button></form>
       <form class="actions" method="post" action="/build/horus"><button class="primary">Generar release Horus</button></form>
     </section>
 
@@ -1020,12 +1415,25 @@ def render_page() -> str:
 </html>"""
 
 
-def main() -> None:
+def create_server() -> tuple[ThreadingHTTPServer, str]:
     port = find_free_port(PORT)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
     STATE.log(f"Launcher abierto en {url}")
-    threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    return server, url
+
+
+def shutdown_server(server: ThreadingHTTPServer) -> None:
+    if STATE.eva_process and STATE.eva_process.poll() is None:
+        STATE.stop_eva()
+    server.shutdown()
+    server.server_close()
+
+
+def main(open_browser: bool = True) -> None:
+    server, url = create_server()
+    if open_browser:
+        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
