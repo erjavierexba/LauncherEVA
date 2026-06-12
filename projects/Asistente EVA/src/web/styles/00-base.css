@@ -1,0 +1,244 @@
+:root {
+  --bg: #0d0f12;
+  --page: #111419;
+  --panel: #1a1f27;
+  --panel-soft: #15181d;
+  --panel-deep: #10141a;
+  --border: #333842;
+  --border-strong: #424a56;
+  --text: #ededed;
+  --muted: #9fa7b3;
+  --soft: #d6d6d6;
+  --accent: #66ccff;
+  --gold: #c9a24a;
+  --danger: #8b1e1e;
+  --radius: 8px;
+  --gap: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+    header {
+      min-height: 48px;
+      padding: 10px clamp(12px, 2vw, 18px);
+      background: var(--panel-soft);
+      border-bottom: 1px solid var(--border);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--gap);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--gap);
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      height: calc(100vh - 48px);
+      min-height: 0;
+      padding: clamp(10px, 1.5vw, 16px);
+      overflow: auto;
+      background: var(--page);
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+      grid-auto-flow: dense;
+      gap: var(--gap);
+      align-items: stretch;
+    }
+
+    section {
+      min-width: 0;
+      padding: var(--gap);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
+
+    section[data-panel="templates"],
+    section[data-panel="initiative"],
+    section[data-panel="status"] {
+      grid-column: span 2;
+    }
+
+    h2 {
+      flex: 0 0 auto;
+      margin: 0 0 10px;
+      font-size: 15px;
+      color: var(--gold);
+    }
+
+    .command-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .command-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+
+    .command-actions > * {
+      flex: 1;
+    }
+
+    .command-spacer {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .status-command .command-body {
+      overflow: auto;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      width: 100%;
+      min-width: 0;
+      padding: 9px 10px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      font: inherit;
+      line-height: 1.25;
+    }
+
+    button {
+      cursor: pointer;
+      background: #263847;
+      border-color: var(--accent);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    button:hover {
+      background: #31506a;
+    }
+
+    button.danger {
+      background: #651818;
+      border-color: var(--gold);
+    }
+
+    button.danger:hover {
+      background: #832020;
+    }
+
+    button.secondary {
+      background: var(--panel);
+      border-color: var(--border-strong);
+    }
+
+    button.compact {
+      width: auto;
+      padding: 8px 12px;
+    }
+
+    button.icon-button {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    select:disabled {
+      opacity: 0.45;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+      gap: 8px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      flex-wrap: wrap;
+    }
+
+    .row > * {
+      flex: 1;
+    }
+
+    .switch-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: auto;
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .switch-row input {
+      width: auto;
+      accent-color: #c9a24a;
+    }
+
+    .status {
+      min-height: 18px;
+      margin-top: 8px;
+      color: var(--soft);
+      font-size: 12px;
+      white-space: pre-wrap;
+    }

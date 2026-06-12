@@ -1,0 +1,74 @@
+    @media (max-width: 980px) {
+      main {
+        overflow: auto;
+      }
+
+      body {
+        overflow: auto;
+      }
+
+      #playersCards {
+        grid-template-columns: 1fr;
+      }
+
+      section[data-panel="templates"],
+      section[data-panel="initiative"],
+      section[data-panel="status"] {
+        grid-column: span 1;
+      }
+
+      .field-editor {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .template-builder {
+        grid-template-columns: 1fr;
+      }
+
+      .phone-preview {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .command-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .row,
+      .grid,
+      .template-fields,
+      .stat-grid,
+      .character-detail-grid,
+      .field-editor {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .command-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-backdrop {
+        align-items: stretch;
+      }
+
+      .modal {
+        width: 100%;
+      }
+
+      .template-builder-workbench {
+        grid-template-columns: 1fr;
+        max-height: none;
+      }
+
+      .builder-pages-column {
+        grid-column: auto;
+      }
+    }

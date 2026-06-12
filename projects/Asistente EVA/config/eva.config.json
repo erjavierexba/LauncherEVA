@@ -1,0 +1,40 @@
+{
+  "assistant": {
+    "name": "EVA",
+    "wakeWord": "eva"
+  },
+  "theme": {
+    "title": "Panel Horus",
+    "background": "#0d0f12",
+    "surface": "#1a1f27",
+    "surfaceAlt": "#111419",
+    "text": "#ededed",
+    "muted": "#9fa7b3",
+    "accent": "#c9a24a",
+    "primary": "#66ccff",
+    "danger": "#c65353",
+    "radius": "8px"
+  },
+  "users": [
+    {
+      "name": "Director",
+      "aliases": [
+        "director",
+        "master",
+        "narrador"
+      ]
+    },
+    {
+      "name": "Jugador 1",
+      "aliases": [
+        "jugador uno",
+        "jugador 1"
+      ]
+    }
+  ],
+  "project": {
+    "roleName": "Horus",
+    "appSubtitle": "EVA mantiene el vinculo abierto"
+  },
+  "firebase": {}
+}

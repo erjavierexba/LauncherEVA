@@ -1,0 +1,81 @@
+import sqlite3
+import unittest
+
+from src.db_domains.character_templates import CharacterTemplatesRepository
+from src.db_domains.players import PlayersRepository
+
+
+class PlayersRepositoryTest(unittest.TestCase):
+    def create_connection(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def test_migrates_legacy_players_table(self):
+        conn = self.create_connection()
+        conn.execute("""
+            CREATE TABLE players (
+                username TEXT PRIMARY KEY,
+                active INTEGER NOT NULL DEFAULT 1,
+                eliminated_at TEXT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT INTO players (username, active) VALUES (?, ?)",
+            ("Visitante", 1),
+        )
+
+        repo = PlayersRepository(conn)
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(players)").fetchall()
+        }
+
+        self.assertTrue({"id", "nombre", "aliases", "npc"}.issubset(columns))
+        self.assertEqual(repo.get("Visitante")["nombre"], "Visitante")
+        self.assertFalse(repo.get("Visitante")["npc"])
+
+    def test_creates_generic_user_with_aliases(self):
+        conn = self.create_connection()
+        players = PlayersRepository(conn)
+
+        result = players.create_user("Guardia", ["centinela", "portero"])
+        self.assertTrue(result["ok"])
+        self.assertFalse(players.get("Guardia")["npc"])
+        self.assertEqual(players.get("Guardia")["aliases"], ["centinela", "portero"])
+
+    def test_creates_multiple_characters_for_player_and_template(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        players = PlayersRepository(conn, [{"name": "Ale"}], templates)
+        player = players.get("Ale")
+
+        first = players.create_character(player["id"], "Kira", "Exploradora", {"class": "Ranger"})
+        second = players.create_character(player["id"], "Nox", "Mago", {"class": "Wizard"})
+
+        self.assertTrue(first["ok"])
+        self.assertTrue(second["ok"])
+        self.assertEqual(first["personaje"]["playerName"], "Ale")
+        self.assertEqual(first["personaje"]["role"], "Exploradora")
+        self.assertEqual(len(players.characters_for_player(player["id"])), 3)
+        self.assertEqual(
+            templates.sheet_for_character(first["personaje"]["id"])["fields"][2]["value"],
+            "Ranger",
+        )
+
+    def test_deletes_character_without_deleting_player(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        players = PlayersRepository(conn, [{"name": "Ale"}], templates)
+        player = players.get("Ale")
+        created = players.create_character(player["id"], "Kira", "Exploradora")
+
+        result = players.delete_character(created["personaje"]["id"])
+
+        self.assertTrue(result["ok"])
+        self.assertIsNotNone(players.get("Ale"))
+        self.assertIsNone(players.get_character(created["personaje"]["id"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,126 @@
+  <div id="playersModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal players-modal">
+      <div class="modal-header">
+        <h2>Personajes</h2>
+        <button id="closePlayersButton" class="compact secondary">Cerrar</button>
+      </div>
+      <div id="playersCards"></div>
+    </div>
+  </div>
+
+  <div id="characterDetailModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="characterDetailTitle">Personaje</h2>
+        <div class="modal-header-actions">
+          <button id="deleteCharacterButton" class="compact danger">Eliminar</button>
+          <button id="closeCharacterDetailButton" class="compact secondary">Cerrar</button>
+        </div>
+      </div>
+      <div id="characterDetailBody" class="character-detail-grid"></div>
+    </div>
+  </div>
+
+  <div id="deleteCharacterModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal confirm-modal">
+      <div class="modal-header">
+        <h2>Eliminar personaje</h2>
+        <button id="cancelDeleteCharacterButton" class="compact secondary">Cerrar</button>
+      </div>
+      <p id="deleteCharacterText" class="confirm-text">Esta acción no se puede deshacer.</p>
+      <div class="command-actions">
+        <button id="confirmDeleteCharacterButton" class="danger">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mediaPreviewModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal preview-modal">
+      <div class="modal-header">
+        <h2 id="mediaPreviewTitle">Previsualización</h2>
+        <button id="closeMediaPreviewButton" class="compact secondary">Cerrar</button>
+      </div>
+      <div id="mediaPreviewBody" class="preview-body"></div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Paneles visibles</h2>
+        <button id="closeSettingsButton" class="compact secondary">Cerrar</button>
+      </div>
+      <div id="panelOptions" class="panel-options"></div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="resetPanelsButton" class="secondary">Mostrar todos</button>
+        <button id="savePanelsButton">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="templateJsonModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal schema-modal">
+      <div class="modal-header">
+        <h2 id="templateJsonModalTitle">Plantilla JSON</h2>
+        <button id="closeTemplateJsonButton" class="compact secondary">Cerrar</button>
+      </div>
+      <div class="grid">
+        <div>
+          <label>Clave técnica</label>
+          <input id="templateJsonKeyInput" placeholder="pathfinder_2e" />
+        </div>
+        <div>
+          <label>Nombre visible</label>
+          <input id="templateJsonLabelInput" placeholder="Pathfinder 2e" />
+        </div>
+      </div>
+      <div class="schema-tools">
+        <button id="templateBuilderTabButton" type="button">Constructor</button>
+        <button id="templateJsonTabButton" type="button" class="secondary">JSON</button>
+        <button id="validateTemplateJsonButton" type="button" class="secondary">Validar</button>
+      </div>
+      <div id="templateBuilderPanel" class="template-builder">
+        <div class="template-builder-workbench">
+          <div class="builder-column">
+            <div class="builder-header">
+              <h3>Campos</h3>
+              <button id="builderAddFieldButton" type="button" class="compact secondary">Añadir</button>
+            </div>
+            <div id="builderFieldsList" class="builder-list"></div>
+          </div>
+          <div class="builder-column">
+            <div class="builder-header">
+              <h3>Constantes</h3>
+              <button id="builderAddConstantButton" type="button" class="compact secondary">Añadir</button>
+            </div>
+            <div id="builderConstantsList" class="builder-list"></div>
+          </div>
+          <div class="builder-column builder-pages-column">
+            <div class="builder-header">
+              <h3>Páginas y secciones</h3>
+              <button id="builderAddPageButton" type="button" class="compact secondary">Página</button>
+            </div>
+            <div id="builderPagesList" class="builder-list"></div>
+          </div>
+        </div>
+        <aside class="phone-preview" aria-label="Preview móvil">
+          <div class="phone-frame">
+            <div class="phone-speaker"></div>
+            <div id="templatePhonePreview" class="phone-screen"></div>
+          </div>
+        </aside>
+      </div>
+      <div id="templateJsonPanel" class="template-json-panel" hidden>
+        <div class="schema-tools">
+          <button id="templateJsonFromFieldsButton" class="secondary">JSON desde campos</button>
+          <button id="templateJsonToFieldsButton" class="secondary">Campos desde JSON</button>
+        </div>
+        <label>Schema del sistema</label>
+        <textarea id="templateJsonTextarea" spellcheck="false"></textarea>
+      </div>
+      <div id="templateJsonStatus" class="schema-status"></div>
+      <div class="command-actions">
+        <button id="saveTemplateJsonButton">Guardar plantilla</button>
+      </div>
+    </div>
+  </div>

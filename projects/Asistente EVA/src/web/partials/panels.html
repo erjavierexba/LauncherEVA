@@ -1,0 +1,211 @@
+  <main>
+    <div class="command-grid">
+      <section data-panel="players" data-panel-title="Ver jugadores">
+        <h2>Ver jugadores</h2>
+        <div class="command-body">
+          <div class="status-panel">
+            <div class="status-panel-title">Mesa</div>
+            <div id="playerSummary" class="status-panel-value">Cargando jugadores...</div>
+            <div class="status-panel-note">Consulta jugadores, estado y ficha en una ventana aparte.</div>
+          </div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="openPlayersButton">Ver jugadores</button>
+            <button id="refreshButton" class="secondary">Refrescar</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="templates" data-panel-title="Plantillas">
+        <h2>Plantillas</h2>
+        <div class="command-body">
+          <div class="grid">
+            <div>
+              <label>Plantilla</label>
+              <select id="templateSelect"></select>
+            </div>
+            <div>
+              <label>Nombre</label>
+              <input id="templateLabelInput" placeholder="Pathfinder 2e" />
+            </div>
+          </div>
+          <div id="templateFieldsEditor" class="field-editor-list"></div>
+          <div class="row">
+            <button id="addTemplateFieldButton" class="secondary">Añadir campo</button>
+            <button id="activateTemplateButton" class="secondary">Activar</button>
+          </div>
+          <div class="command-actions">
+            <button id="createTemplateButton" class="secondary">Nueva</button>
+            <button id="duplicateTemplateButton" class="secondary">Duplicar</button>
+            <button id="editTemplateJsonButton" class="secondary">Diseñar</button>
+            <button id="saveTemplateButton">Guardar</button>
+            <button id="deleteTemplateButton" class="danger">Eliminar</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="npc" data-panel-title="Crear personaje">
+        <h2>Crear personaje</h2>
+        <div class="command-body">
+          <div>
+            <label>Jugador</label>
+            <select id="npcPlayerSelect"></select>
+          </div>
+          <div>
+            <label>Nombre</label>
+            <input id="npcNameInput" placeholder="Nombre del personaje" />
+          </div>
+          <div>
+            <label>Rol</label>
+            <input id="npcRoleInput" placeholder="Guerrera, sanador, contacto..." />
+          </div>
+          <div id="npcTemplateFields" class="template-fields"></div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="createNpcButton">Crear</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="media" data-panel-title="Enviar Archivo">
+        <h2>Enviar Archivo</h2>
+        <div class="command-body">
+          <div class="row">
+            <div>
+              <label>Destino</label>
+              <select id="mediaTargetSelect"></select>
+            </div>
+            <div>
+              <label>Tipo</label>
+              <select id="mediaTypeSelect">
+                <option value="IMAGEN">Imágenes</option>
+                <option value="VIDEO">Vídeos</option>
+                <option value="AUDIO">Audios</option>
+                <option value="DOCUMENTO">Documentos</option>
+                <option value="TEXTO">Textos</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label>Archivo</label>
+            <select id="mediaFileSelect"></select>
+          </div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="mediaPreviewButton" class="secondary">Previsualizar</button>
+            <button id="mediaButton">Enviar archivo</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="countdown" data-panel-title="Countdown">
+        <h2>Countdown</h2>
+        <div class="command-body">
+          <div class="grid">
+            <div>
+              <label>Destino</label>
+              <select id="countdownTargetSelect"></select>
+            </div>
+            <div>
+              <label>Segundos</label>
+              <input id="countdownSecondsInput" type="number" min="1" value="10" />
+            </div>
+          </div>
+          <label>Etiqueta</label>
+          <input id="countdownLabelInput" value="Temporizador" />
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="countdownButton">Lanzar countdown</button>
+            <button id="countdownCancelButton" class="secondary">Cancelar countdown</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="music" data-panel-title="Música">
+        <h2>Música</h2>
+        <div class="command-body">
+          <div class="now-playing">
+            <div id="musicStateLabel" class="now-playing-label">Sin música</div>
+            <div id="musicCurrentTitle" class="now-playing-title">Nada sonando</div>
+          </div>
+          <label>Canción con mote</label>
+          <select id="musicTrackSelect"></select>
+          <div class="command-spacer"></div>
+          <div class="music-controls">
+            <button id="musicResumeButton" class="transport-button">Play</button>
+            <button id="musicPauseButton" class="transport-button">Pausa</button>
+            <button id="musicRestartButton" class="transport-button">Restart</button>
+            <button id="musicStopButton" class="transport-button">Stop</button>
+          </div>
+          <div class="music-controls">
+            <button id="musicSelectPlayButton" class="transport-button primary">Poner</button>
+          </div>
+          <div class="volume-controls command-actions">
+            <button id="musicDownButton" class="volume-button">Volumen -</button>
+            <button id="musicUpButton" class="volume-button">Volumen +</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="special" data-panel-title="Órdenes especiales">
+        <h2>Órdenes especiales</h2>
+        <div class="command-body">
+          <div class="row">
+            <div>
+              <label>Eliminar jugador</label>
+              <select id="killPlayerSelect"></select>
+            </div>
+          </div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="killButton" class="danger">Eliminar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="status-command" data-panel="status" data-panel-title="Estado">
+        <h2>Estado</h2>
+        <div class="command-body">
+          <div class="status-panel">
+            <div class="status-panel-title">Última acción</div>
+            <div id="statusMessage" class="status-panel-value">Panel listo.</div>
+            <div class="status-panel-note">Las órdenes de voz y web comparten el mismo estado.</div>
+            <div id="statusLog" class="status-log"></div>
+          </div>
+          <div class="command-spacer"></div>
+        </div>
+      </section>
+
+      <section data-panel="initiative" data-panel-title="Iniciativa">
+        <h2>Iniciativa</h2>
+        <div class="command-body">
+          <div class="initiative-summary">
+            <div id="initiativeCurrent" class="initiative-current">Sin combate activo</div>
+            <div id="initiativeNote" class="initiative-note">Añade participantes y ordénalos por iniciativa.</div>
+          </div>
+          <div class="grid">
+            <div>
+              <label>Nombre</label>
+              <input id="initiativeNameInput" placeholder="PJ, NPC o criatura" />
+            </div>
+            <div>
+              <label>Iniciativa</label>
+              <input id="initiativeScoreInput" type="number" value="10" />
+            </div>
+          </div>
+          <div>
+            <label>Vida / estado</label>
+            <input id="initiativeHpInput" placeholder="23 PV, herido, sangre..." />
+          </div>
+          <div id="initiativeList" class="initiative-list"></div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="initiativeAddButton">Añadir</button>
+            <button id="initiativeNextButton" class="secondary">Siguiente</button>
+            <button id="initiativeClearButton" class="danger">Limpiar</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
