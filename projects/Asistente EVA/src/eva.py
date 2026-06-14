@@ -247,6 +247,24 @@ def ventana_rms_silencio() -> int:
     return muestras
 
 
+def selected_audio_device(context):
+    env_device = os.getenv("EVA_INPUT_DEVICE", "").strip()
+    audio_config = context.config.data.get("audio")
+    config_device = ""
+
+    if isinstance(audio_config, dict):
+        config_device = str(audio_config.get("inputDeviceId") or "").strip()
+
+    raw_device = env_device or config_device
+    if not raw_device:
+        return None
+
+    try:
+        return int(raw_device)
+    except ValueError:
+        return raw_device
+
+
 async def ejecutar_info_comando(info, context):
     global comando_activo, last_eva_time
 
@@ -424,8 +442,12 @@ async def start_eva(context):
     print(" - Eva muestra pantano punto png")
     print(" - Eva pon música combate")
     print("Pulsa CTRL+C para salir.\n")
+    audio_device = selected_audio_device(context)
+    if audio_device is not None:
+        print(f"Microfono seleccionado: {audio_device}")
 
     with sd.RawInputStream(
+        device=audio_device,
         samplerate=SAMPLE_RATE,
         blocksize=AUDIO_BLOCK_SIZE,
         dtype="int16",

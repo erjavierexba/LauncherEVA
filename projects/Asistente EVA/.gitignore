@@ -23,7 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-/media
-
 *.sqlite3
+*.sqlite3.backup-*
 firebase-service-account.json
+!config/firebase-service-account.json
+web_firestore.json

@@ -3,7 +3,21 @@ import re
 from src.app_context import get_app_context
 
 
-MUSIC_MAP = {}
+MUSIC_MAP = {
+    "combate": {
+        1: "assets/music/combate_1.mp3",
+        2: "assets/music/combate_2.mp3",
+    },
+    "tension": {
+        1: "assets/music/tension_1.mp3",
+    },
+    "exploracion": {
+        1: "assets/music/exploracion_1.mp3",
+    },
+    "despertar": {
+        1: "assets/music/despertar.mp3",
+    }
+}
 
 
 def parse_music_request(texto: str):

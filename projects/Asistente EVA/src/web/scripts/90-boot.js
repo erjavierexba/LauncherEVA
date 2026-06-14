@@ -1,6 +1,13 @@
+    numeroSelect.addEventListener("change", () => {
+      const esJoker = numeroSelect.value === "joker" || numeroSelect.value === "joker dorado";
+      paloSelect.disabled = esJoker;
+    });
+    document.getElementById("assignButton").addEventListener("click", () => runAction(assignCard));
     document.getElementById("mediaButton").addEventListener("click", () => runAction(sendMedia));
     document.getElementById("mediaPreviewButton").addEventListener("click", previewSelectedMedia);
+    document.getElementById("clearMediaCacheButton").addEventListener("click", clearMediaCache);
     mediaTypeSelect.addEventListener("change", renderMediaCatalog);
+    mediaFileSelect.addEventListener("change", renderMediaCatalog);
     document.getElementById("countdownButton").addEventListener("click", () => runAction(startCountdown));
     document.getElementById("countdownCancelButton").addEventListener("click", () => runAction(cancelCountdown));
     document.getElementById("musicSelectPlayButton").addEventListener("click", () => runAction(playMusic));
@@ -11,6 +18,8 @@
     document.getElementById("musicDownButton").addEventListener("click", () => runAction(() => controlMusic("down")));
     document.getElementById("musicStopButton").addEventListener("click", () => runAction(() => controlMusic("stop")));
     document.getElementById("killButton").addEventListener("click", () => runAction(eliminatePlayer));
+    document.getElementById("generateNamesButton").addEventListener("click", () => runAction(generateNamesAction));
+    nameCategorySelect.addEventListener("change", renderNameSubtypeOptions);
     document.getElementById("createNpcButton").addEventListener("click", () => runAction(createNpc));
     templateSelect.addEventListener("change", renderTemplateEditor);
     document.getElementById("addTemplateFieldButton").addEventListener("click", () => {
@@ -57,11 +66,37 @@
     document.getElementById("initiativeAddButton").addEventListener("click", addInitiativeCombatant);
     document.getElementById("initiativeNextButton").addEventListener("click", nextInitiativeTurn);
     document.getElementById("initiativeClearButton").addEventListener("click", clearInitiative);
+    document.getElementById("doorEvaluateButton").addEventListener("click", () => runAction(evaluateDoor));
+    document.getElementById("doorCancelButton").addEventListener("click", () => runAction(cancelDoor));
+    document.getElementById("openExchangeButton").addEventListener("click", openExchangeModal);
+    document.getElementById("closeExchangeButton").addEventListener("click", closeExchangeModal);
+    document.getElementById("startExchangeButton").addEventListener("click", () => runAction(startExchange));
+    document.getElementById("cancelExchangeButton").addEventListener("click", () => runAction(cancelExchange));
     submitOnEnter(npcNameInput.closest("section"), () => runAction(createNpc));
+    submitOnEnter(numeroSelect.closest("section"), () => runAction(assignCard));
     submitOnEnter(mediaTargetSelect.closest("section"), () => runAction(sendMedia));
     submitOnEnter(countdownTargetSelect.closest("section"), () => runAction(startCountdown));
     submitOnEnter(killPlayerSelect.closest("section"), () => runAction(eliminatePlayer));
+    submitOnEnter(nameCategorySelect.closest("section"), () => runAction(generateNamesAction));
+    submitOnEnter(doorCombinationSelect.closest("section"), () => runAction(evaluateDoor));
     submitOnEnter(initiativeNameInput.closest("section"), addInitiativeCombatant);
+    viewTabs.forEach((tab) => {
+      tab.addEventListener("click", () => setPanelView(tab.dataset.panelFilter));
+    });
+    [
+      doorCombinationSelect,
+      doorLengthInput,
+      doorAtLeastCountInput,
+      doorAtLeastKindSelect,
+      doorSuitModeSelect,
+      doorSuitSelect,
+      doorRankFilterSelect,
+      doorColorSelect,
+      doorParitySelect,
+    ].forEach((control) => {
+      control.addEventListener("input", renderDoorSummary);
+      control.addEventListener("change", renderDoorSummary);
+    });
 
     function connectEvents() {
       const ws = new WebSocket(window.EVA_WS_URL);
@@ -76,6 +111,41 @@
 
           if (data.tipo === "COUNTDOWN_CANCEL") {
             setStatus("Countdown cancelado.");
+          }
+
+          if (data.tipo === "MUESTRA") {
+            cacheMediaItem(data.valor, data.destinatario);
+            setStatus(data.mensaje || `Archivo guardado: ${data.valor?.nombre || "archivo"}.`);
+          }
+
+          if (data.tipo === "DOOR_CHALLENGE" && data.valor) {
+            renderDoorChallenge(data.valor);
+            if (data.valor.status === "pending_validation") {
+              setStatus("La mesa propone una puerta. Espera tu validación.");
+            } else if (data.valor.status === "approved") {
+              setStatus("Puerta validada.");
+            } else if (data.valor.status === "rejected") {
+              setStatus("Puerta rechazada.");
+            }
+          }
+
+          if (data.tipo === "DOOR_CANCEL") {
+            for (const challenge of data.valor?.challenges || []) {
+              renderDoorChallenge(challenge);
+            }
+            setStatus("Puerta cancelada.");
+          }
+
+          if ((data.tipo === "EXCHANGE_OPEN" || data.tipo === "EXCHANGE_CLOSED") && data.valor) {
+            renderExchange(data.valor);
+            if (data.tipo === "EXCHANGE_OPEN") {
+              setStatus("Puesto de intercambio activo.");
+            } else if (data.valor.status === "completed") {
+              setStatus("Intercambio completado.");
+              loadCardsStatus();
+            } else {
+              setStatus("Puesto de intercambio cerrado.");
+            }
           }
 
           if (data.tipo === "DICE_ROLL") {
@@ -110,10 +180,13 @@
     }
 
     loadPanelVisibility();
+    renderDoorSummary();
     loadInitiativeState();
+    readMediaCache();
     loadTemplates();
     loadCardsStatus();
     loadMediaCatalog();
+    loadNameGeneratorOptions();
     loadMusicStatus();
     connectEvents();
     setInterval(loadCardsStatus, 5000);

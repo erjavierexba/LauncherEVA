@@ -2,6 +2,7 @@ import asyncio
 
 from src.app_context import create_app_context, set_app_context
 from src.eva import start_eva
+from src.horus_server import start_horus_server
 from src.ws_server import start_ws_server
 from src.web_server import start_web_server
 
@@ -13,6 +14,7 @@ async def main():
     await asyncio.gather(
         start_ws_server(context),
         start_web_server(context),
+        start_horus_server(context),
         start_eva(context),
     )
 

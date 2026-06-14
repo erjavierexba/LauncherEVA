@@ -4,6 +4,13 @@ import re
 
 class CharacterTemplatesRepository:
     FIELD_TYPES = {"text", "int", "b_int", "throw", "array", "cycle"}
+    BASIC_CHARACTER_SCHEMA = {
+        "id": "personaje_basico",
+        "name": "Personaje básico",
+        "version": 1,
+        "fields": [],
+        "pages": [],
+    }
     PATHFINDER_2E_SCHEMA = {
         "id": "pathfinder2e",
         "name": "Pathfinder 2e",
@@ -178,7 +185,9 @@ class CharacterTemplatesRepository:
             )
 
     def _seed_templates(self):
+        had_basic_template = self._template_id("personaje_basico") is not None
         templates = [
+            ("personaje_basico", "Personaje básico"),
             ("pathfinder_2e", "Pathfinder 2e"),
         ]
 
@@ -192,14 +201,28 @@ class CharacterTemplatesRepository:
             )
 
         active = self.conn.execute(
-            "SELECT id FROM character_templates WHERE active = 1 LIMIT 1"
+            "SELECT id, key FROM character_templates WHERE active = 1 LIMIT 1"
         ).fetchone()
 
-        if active is None:
+        if active is None or (active["key"] == "pathfinder_2e" and not had_basic_template):
+            self.conn.execute(
+                "UPDATE character_templates SET active = 0"
+            )
             self.conn.execute(
                 "UPDATE character_templates SET active = 1 WHERE key = ?",
-                ("pathfinder_2e",),
+                ("personaje_basico",),
             )
+
+        basic_id = self._template_id("personaje_basico")
+        self.conn.execute(
+            """
+            UPDATE character_templates
+            SET schema_json = ?, label = ?
+            WHERE key = ?
+            """,
+            (self._serialize_schema(self.BASIC_CHARACTER_SCHEMA), "Personaje básico", "personaje_basico"),
+        )
+        self._ensure_schema_fields(basic_id, self.BASIC_CHARACTER_SCHEMA)
 
         pathfinder_id = self._template_id("pathfinder_2e")
         self.conn.execute(

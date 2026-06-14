@@ -39,16 +39,36 @@ class PlayersRepository:
                 """,
                 (nombre, json.dumps(aliases, ensure_ascii=False)),
             )
-            self.conn.execute(
-                "UPDATE players SET aliases = ? WHERE nombre = ?",
-                (json.dumps(aliases, ensure_ascii=False), nombre),
-            )
+            self._merge_config_aliases(nombre, aliases)
 
         if self.character_templates is not None:
             self.character_templates.ensure_values_for_all_players()
             self._ensure_legacy_characters()
 
         self.conn.commit()
+
+    def _merge_config_aliases(self, nombre: str, aliases: list[str]):
+        row = self.conn.execute(
+            "SELECT aliases FROM players WHERE nombre = ?",
+            (nombre,),
+        ).fetchone()
+
+        if row is None:
+            return
+
+        merged = []
+        seen = set()
+        for alias in [*parse_aliases(row["aliases"]), *aliases]:
+            clean = str(alias).strip()
+            key = normalizar(clean)
+            if clean and key not in seen:
+                seen.add(key)
+                merged.append(clean)
+
+        self.conn.execute(
+            "UPDATE players SET aliases = ? WHERE nombre = ?",
+            (json.dumps(merged, ensure_ascii=False), nombre),
+        )
 
     def _init_characters_table(self):
         self.conn.execute("""

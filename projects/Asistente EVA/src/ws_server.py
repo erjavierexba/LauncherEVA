@@ -57,9 +57,14 @@ def notification_recipients(context, data: dict):
     destinatario = data.get("destinatario")
 
     if tipo not in (
+        "CARTA",
         "MUESTRA",
         "COUNTDOWN",
         "COUNTDOWN_CANCEL",
+        "DOOR_CHALLENGE",
+        "DOOR_CANCEL",
+        "EXCHANGE_OPEN",
+        "EXCHANGE_CLOSED",
         "DICE_ROLL",
         "TEMPLATE_UPDATE",
         "CHARACTER_SHEET_UPDATE",
@@ -67,6 +72,15 @@ def notification_recipients(context, data: dict):
         return []
 
     users = [user["nombre"] for user in context.db.players.all() if user["active"]]
+
+    if tipo in ("EXCHANGE_OPEN", "EXCHANGE_CLOSED"):
+        value = data.get("valor") if isinstance(data.get("valor"), dict) else {}
+        participants = value.get("playerParticipants") or value.get("participants") or []
+        return [
+            username
+            for username in users
+            if username in participants and not context.db.players.is_npc(username)
+        ]
 
     if destinatario == "TODOS":
         return users

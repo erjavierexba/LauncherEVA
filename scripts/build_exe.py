@@ -36,6 +36,7 @@ def ignore_project_artifacts(directory: str, names: list[str]) -> set[str]:
         "vosk-model-es-0.42.zip",
         "google-services.json",
         "firebase-service-account.json",
+        "web_firestore.json",
     }
     return {
         name

@@ -66,6 +66,18 @@
       border-radius: var(--radius);
     }
 
+    section[data-panel="status"] .status-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 4px;
+      background: #101720;
+      border-color: rgba(212, 170, 82, 0.42);
+    }
+
+    section[data-panel="status"] .status-panel-value {
+      font-size: 17px;
+    }
+
     .status-panel-title {
       margin-bottom: 6px;
       color: var(--muted);
@@ -92,11 +104,13 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      max-height: 96px;
+      overflow: auto;
     }
 
     .status-log-line {
       display: grid;
-      grid-template-columns: 54px 1fr;
+      grid-template-columns: 74px minmax(0, 1fr);
       gap: 8px;
       color: #c8ced8;
       font-size: 12px;

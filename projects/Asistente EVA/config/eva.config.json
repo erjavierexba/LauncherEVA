@@ -36,5 +36,20 @@
     "roleName": "Horus",
     "appSubtitle": "EVA mantiene el vinculo abierto"
   },
-  "firebase": {}
+  "audio": {
+    "inputDeviceId": "",
+    "inputDeviceName": ""
+  },
+  "network": {
+    "webPort": 8080,
+    "horusPort": 8081,
+    "wsPort": 8765
+  },
+  "firebase": {
+    "web": {
+      "vapidPublicKey": "",
+      "vapidPrivateKey": "",
+      "firebaseConfig": {}
+    }
+  }
 }

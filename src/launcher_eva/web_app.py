@@ -179,11 +179,14 @@ def default_settings() -> dict:
         "android_package": "com.eva.horus",
         "firebase_service_account_path": "",
         "google_services_path": "",
+        "firebase_web_config_path": "",
         "eva_path": str(projects_root / "Asistente EVA"),
         "horus_path": str(projects_root / "horus"),
         "eva_remote": "",
         "horus_remote": "",
         "web_port": "8080",
+        "horus_port": "8081",
+        "microphone_device": "",
     }
 
 
@@ -252,6 +255,18 @@ def is_hex_color(value: str) -> bool:
     return bool(re.fullmatch(r"#[0-9a-fA-F]{6}", str(value or "").strip()))
 
 
+def parse_port(value, fallback: int) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if 1 <= port <= 65535:
+        return port
+
+    return fallback
+
+
 def render_theme_input(key: str, value: str) -> str:
     if key in {"title", "radius"}:
         return f'<label>{h(key)}<input name="{h(key)}" value="{h(value)}"></label>'
@@ -266,6 +281,56 @@ def render_theme_input(key: str, value: str) -> str:
         f'</span>'
         f'</label>'
     )
+
+
+def microphone_devices() -> list[dict[str, str]]:
+    try:
+        import sounddevice as sd
+
+        devices = sd.query_devices()
+    except Exception:
+        return []
+
+    items = []
+    for index, device in enumerate(devices):
+        try:
+            input_channels = int(device.get("max_input_channels", 0))
+        except (AttributeError, TypeError, ValueError):
+            input_channels = 0
+
+        if input_channels <= 0:
+            continue
+
+        name = str(device.get("name", f"Dispositivo {index}"))
+        hostapi = str(device.get("hostapi", ""))
+        items.append({
+            "id": str(index),
+            "name": name,
+            "label": f"{index} · {name}",
+            "hostapi": hostapi,
+        })
+
+    return items
+
+
+def parse_firebase_web_file(path: Path) -> dict:
+    data = load_json(path, {})
+    if not isinstance(data, dict):
+        return {}
+
+    public = data.get("public")
+    private = data.get("private")
+    firebase_config = data.get("firebaseConfig") or data.get("config")
+
+    if isinstance(public, dict):
+        firebase_config = public.get("firebaseConfig") or public.get("config") or firebase_config
+        public = public.get("vapidPublicKey") or public.get("publicKey")
+
+    return {
+        "vapidPublicKey": str(public or "").strip(),
+        "vapidPrivateKey": str(private or "").strip(),
+        "firebaseConfig": firebase_config if isinstance(firebase_config, dict) else {},
+    }
 
 
 class LauncherState:
@@ -298,11 +363,14 @@ class LauncherState:
             "android_package",
             "firebase_service_account_path",
             "google_services_path",
+            "firebase_web_config_path",
             "eva_path",
             "horus_path",
             "eva_remote",
             "horus_remote",
             "web_port",
+            "horus_port",
+            "microphone_device",
         ]:
             if key in form:
                 self.settings[key] = form[key].strip()
@@ -759,12 +827,25 @@ class LauncherState:
             "roleName": role_name,
             "appSubtitle": self.app_subtitle(),
         }
+        config["network"] = {
+            "webPort": parse_port(self.settings.get("web_port"), 8080),
+            "horusPort": parse_port(self.settings.get("horus_port"), 8081),
+            "wsPort": 8765,
+        }
+        microphone_id = self.settings.get("microphone_device", "").strip()
+        config["audio"] = {
+            "inputDeviceId": microphone_id,
+            "inputDeviceName": self.microphone_name(microphone_id),
+        }
         firebase_config = config.get("firebase") if isinstance(config.get("firebase"), dict) else {}
         service_account = self.prepare_eva_service_account()
         if service_account:
             firebase_config["serviceAccountPath"] = service_account
         else:
             firebase_config.pop("serviceAccountPath", None)
+        web_firebase = self.prepare_eva_firebase_web_config()
+        if web_firebase:
+            firebase_config["web"] = web_firebase
         config["firebase"] = firebase_config
         self.save_eva_config(config)
 
@@ -774,6 +855,16 @@ class LauncherState:
         self.write_horus_theme(theme)
         self.prepare_horus_google_services()
         self.log("Configuración propagada a EVA y Horus.")
+
+    def microphone_name(self, microphone_id: str) -> str:
+        if not microphone_id:
+            return ""
+
+        for device in microphone_devices():
+            if device["id"] == microphone_id:
+                return device["name"]
+
+        return ""
 
     def prepare_eva_service_account(self) -> str | None:
         source_text = self.settings.get("firebase_service_account_path", "").strip()
@@ -788,6 +879,33 @@ class LauncherState:
         if source.resolve() != destination.resolve():
             shutil.copyfile(source, destination)
         return destination.as_posix()
+
+    def prepare_eva_firebase_web_config(self) -> dict | None:
+        source_text = self.settings.get("firebase_web_config_path", "").strip()
+        if not source_text:
+            return None
+
+        source = Path(source_text).expanduser()
+        if not source.exists() or not source.is_file():
+            self.log(f"Firebase web JSON no encontrado: {source}")
+            return None
+
+        config = parse_firebase_web_file(source)
+        if not config.get("vapidPublicKey"):
+            self.log("Firebase web ignorado: falta clave pública VAPID.")
+            return None
+
+        missing = [
+            key
+            for key in ("apiKey", "projectId", "messagingSenderId", "appId")
+            if not config.get("firebaseConfig", {}).get(key)
+        ]
+        if missing:
+            self.log(f"Firebase web guardado, pero falta firebaseConfig: {', '.join(missing)}.")
+        else:
+            self.log("Firebase web configurado para Horus PWA.")
+
+        return config
 
     def prepare_horus_google_services(self) -> None:
         destination = self.horus_path() / "google-services.json"
@@ -1035,9 +1153,12 @@ class LauncherState:
         if target == "service":
             destination = destination_root / "firebase-service-account.json"
             setting = "firebase_service_account_path"
-        else:
+        elif target == "google":
             destination = destination_root / "google-services.json"
             setting = "google_services_path"
+        else:
+            destination = destination_root / "firebase-web.json"
+            setting = "firebase_web_config_path"
         shutil.copyfile(upload_path, destination)
         self.settings[setting] = destination.as_posix()
         save_json(self.settings_path, self.settings)
@@ -1153,7 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE.delete_horus_audio(form.get("target", ""))
             STATE.apply_release_configuration()
         elif path == "/firebase/upload":
-            for field, target in [("service", "service"), ("google", "google")]:
+            for field, target in [("service", "service"), ("google", "google"), ("web", "web")]:
                 upload = files.get(field)
                 if upload:
                     STATE.set_firebase_file(upload["path"], upload["filename"], target)
@@ -1231,6 +1352,8 @@ def render_page() -> str:
     role_name = settings.get("role_name", "Horus")
     default_package = settings.get("android_package") or f"com.eva.{package_slug(role_name)}"
     eva_running = STATE.eva_process is not None and STATE.eva_process.poll() is None
+    microphones = microphone_devices()
+    selected_microphone = settings.get("microphone_device", "")
     horus_audio_login = STATE.horus_path() / "assets" / "audio" / "login.mp3"
     horus_audio_menu = STATE.horus_path() / "assets" / "audio" / "menu.mp3"
     log_text = "\n".join(STATE.logs[-180:])
@@ -1252,6 +1375,10 @@ def render_page() -> str:
         f'<td><form method="post" action="/media/delete"><input type="hidden" name="filename" value="{h(item["filename"])}"><button>Eliminar</button></form></td></tr>'
         for item in media
     )
+    microphone_options = '<option value="">Microfono por defecto</option>' + "".join(
+        f'<option value="{h(device["id"])}" {"selected" if device["id"] == selected_microphone else ""}>{h(device["label"])}</option>'
+        for device in microphones
+    )
     return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -1269,7 +1396,7 @@ def render_page() -> str:
     h2 {{ margin:0 0 12px; font-size:15px; color:var(--gold); text-transform:uppercase; }}
     form.grid, .grid {{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }}
     label {{ display:grid; gap:5px; color:var(--muted); font-size:12px; font-weight:800; }}
-    input, textarea {{ width:100%; min-height:36px; border:1px solid #394554; border-radius:6px; background:#0c1016; color:var(--text); padding:8px 9px; }}
+    input, textarea, select {{ width:100%; min-height:36px; border:1px solid #394554; border-radius:6px; background:#0c1016; color:var(--text); padding:8px 9px; }}
     input[type="color"] {{ width:44px; min-width:44px; height:36px; min-height:36px; padding:2px; cursor:pointer; }}
     textarea {{ min-height:94px; resize:vertical; }}
     .color-field {{ display:grid; grid-template-columns:44px minmax(0, 1fr); gap:8px; align-items:center; }}
@@ -1291,6 +1418,7 @@ def render_page() -> str:
   <div><h1>Launcher EVA</h1><div class="status">EVA {'arrancada' if eva_running else 'detenida'}</div></div>
   <div class="actions">
     <a class="button" href="http://localhost:{h(settings.get('web_port', '8080'))}/" target="_blank">Abrir EVA</a>
+    <a class="button" href="http://localhost:{h(settings.get('horus_port', '8081'))}/" target="_blank">Abrir Horus</a>
     <form method="post" action="/start-eva"><button>Arrancar EVA</button></form>
     <form method="post" action="/stop-eva"><button>Detener EVA</button></form>
   </div>
@@ -1310,6 +1438,8 @@ def render_page() -> str:
         <label>Remote EVA opcional<input name="eva_remote" value="{h(settings.get('eva_remote'))}"></label>
         <label>Remote Horus opcional<input name="horus_remote" value="{h(settings.get('horus_remote'))}"></label>
         <label>Puerto web EVA<input name="web_port" value="{h(settings.get('web_port'))}"></label>
+        <label>Puerto Horus PWA<input name="horus_port" value="{h(settings.get('horus_port', '8081'))}"></label>
+        <label class="span2">Microfono EVA<select name="microphone_device">{microphone_options}</select></label>
         <div class="actions span2"><button class="primary">Guardar configuración y propagar</button></div>
       </form>
       <form class="grid" method="post" action="/horus/assets" enctype="multipart/form-data">
@@ -1330,6 +1460,7 @@ def render_page() -> str:
       <form class="grid" method="post" action="/firebase/upload" enctype="multipart/form-data">
         <label>Service account EVA JSON<input type="file" name="service" accept=".json,application/json"></label>
         <label>google-services app JSON<input type="file" name="google" accept=".json,application/json"></label>
+        <label class="span2">Firebase web / VAPID JSON<input type="file" name="web" accept=".json,application/json"></label>
         <div class="actions span2"><button>Guardar Firebase del rol</button></div>
       </form>
       <form class="actions" method="post" action="/pull">

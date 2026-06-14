@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-import os
 import re
 import shutil
 import unicodedata
 
-MEDIA_ROOT = Path(os.environ.get("EVA_MEDIA_ROOT", "media"))
+MEDIA_ROOT = Path("media")
 ALIASES_FILE = MEDIA_ROOT / "aliases.json"
 
 ALLOWED_EXTENSIONS = {

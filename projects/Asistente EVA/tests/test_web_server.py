@@ -6,10 +6,21 @@ from src.db_domains.character_templates import CharacterTemplatesRepository
 from src.db_domains.players import PlayersRepository
 
 try:
-    from src.web_server import character_sheet_update_event, template_update_event
+    from src.web_server import (
+        DOOR_CHALLENGES,
+        EXCHANGE_POSTS,
+        active_door_challenges_for_user,
+        active_exchange_post_for_user,
+        character_sheet_update_event,
+        template_update_event,
+    )
 except ModuleNotFoundError as error:
     if error.name != "aiohttp":
         raise
+    DOOR_CHALLENGES = None
+    EXCHANGE_POSTS = None
+    active_door_challenges_for_user = None
+    active_exchange_post_for_user = None
     character_sheet_update_event = None
     template_update_event = None
 
@@ -50,6 +61,33 @@ class WebServerTest(unittest.TestCase):
         self.assertEqual(event["destinatario"], "Ale")
         self.assertEqual(event["valor"]["username"], "Ale")
         self.assertEqual(event["valor"]["fields"], ["hp"])
+
+    def test_active_state_helpers_only_return_player_items(self):
+        DOOR_CHALLENGES.clear()
+        EXCHANGE_POSTS.clear()
+        self.addCleanup(DOOR_CHALLENGES.clear)
+        self.addCleanup(EXCHANGE_POSTS.clear)
+
+        DOOR_CHALLENGES["door-1"] = {
+            "id": "door-1",
+            "status": "active",
+            "participants": ["Ale", "Bea"],
+        }
+        DOOR_CHALLENGES["door-2"] = {
+            "id": "door-2",
+            "status": "cancelled",
+            "participants": ["Ale"],
+        }
+        EXCHANGE_POSTS["exchange-1"] = {
+            "id": "exchange-1",
+            "status": "active",
+            "participants": ["Ale", "Bea"],
+        }
+
+        self.assertEqual([item["id"] for item in active_door_challenges_for_user("Ale")], ["door-1"])
+        self.assertIs(active_exchange_post_for_user("Ale"), EXCHANGE_POSTS["exchange-1"])
+        self.assertEqual(active_door_challenges_for_user("Cris"), [])
+        self.assertIsNone(active_exchange_post_for_user("Cris"))
 
 
 if __name__ == "__main__":

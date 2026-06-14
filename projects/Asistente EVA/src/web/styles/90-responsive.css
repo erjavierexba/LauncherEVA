@@ -13,7 +13,8 @@
 
       section[data-panel="templates"],
       section[data-panel="initiative"],
-      section[data-panel="status"] {
+      section[data-panel="status"],
+      section[data-panel="media"] {
         grid-column: span 1;
       }
 
@@ -36,6 +37,20 @@
         flex-direction: column;
       }
 
+      .brand-block,
+      .view-tabs,
+      .header-actions {
+        width: 100%;
+      }
+
+      .view-tabs {
+        justify-content: flex-start;
+      }
+
+      .view-tab {
+        min-width: 68px;
+      }
+
       .command-grid {
         grid-template-columns: 1fr;
       }
@@ -53,6 +68,21 @@
 
       .command-actions {
         grid-template-columns: 1fr;
+      }
+
+      .media-gallery {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-height: none;
+      }
+
+      .initiative-row {
+        grid-template-columns: 46px minmax(0, 1fr) 58px 34px;
+      }
+
+      .initiative-hp,
+      .initiative-damage,
+      .initiative-notes {
+        grid-column: 2 / -1;
       }
 
       .modal-backdrop {

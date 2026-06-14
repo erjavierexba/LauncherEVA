@@ -38,3 +38,4 @@ projects/**/assets/music/*.mp3
 projects/**/google-services.json
 projects/**/android/app/google-services.json
 projects/**/config/firebase-service-account.json
+projects/**/web_firestore.json

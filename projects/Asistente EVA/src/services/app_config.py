@@ -26,6 +26,23 @@ DEFAULT_CONFIG = {
         "radius": "8px",
     },
     "users": [],
+    "audio": {
+        "inputDeviceId": "",
+        "inputDeviceName": "",
+    },
+    "network": {
+        "webPort": 8080,
+        "horusPort": 8081,
+        "wsPort": 8765,
+    },
+    "firebase": {
+        "serviceAccountPath": "config/firebase-service-account.json",
+        "web": {
+            "vapidPublicKey": "",
+            "vapidPrivateKey": "",
+            "firebaseConfig": {},
+        },
+    },
 }
 
 
@@ -150,4 +167,43 @@ def merge_config(data: dict):
     if isinstance(data.get("users"), list):
         merged["users"] = data["users"]
 
+    if isinstance(data.get("audio"), dict):
+        audio = data["audio"]
+        merged["audio"].update({
+            key: value
+            for key, value in audio.items()
+            if key in ("inputDeviceId", "inputDeviceName")
+        })
+
+    if isinstance(data.get("network"), dict):
+        network = data["network"]
+        for key in ("webPort", "horusPort", "wsPort"):
+            value = parse_port(network.get(key), merged["network"][key])
+            merged["network"][key] = value
+
+    if isinstance(data.get("firebase"), dict):
+        firebase = data["firebase"]
+        if isinstance(firebase.get("serviceAccountPath"), str):
+            merged["firebase"]["serviceAccountPath"] = firebase["serviceAccountPath"]
+
+        if isinstance(firebase.get("web"), dict):
+            web_config = firebase["web"]
+            merged["firebase"]["web"].update({
+                key: value
+                for key, value in web_config.items()
+                if key in ("vapidPublicKey", "vapidPrivateKey", "firebaseConfig")
+            })
+
     return merged
+
+
+def parse_port(value, fallback: int) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if 1 <= port <= 65535:
+        return port
+
+    return fallback

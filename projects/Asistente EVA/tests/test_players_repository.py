@@ -44,11 +44,33 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertFalse(players.get("Guardia")["npc"])
         self.assertEqual(players.get("Guardia")["aliases"], ["centinela", "portero"])
 
+    def test_config_aliases_are_merged_without_overwriting_existing_aliases(self):
+        conn = self.create_connection()
+        PlayersRepository(conn, [{"name": "Ale", "aliases": ["ale"]}])
+        players = PlayersRepository(conn, [{"name": "Ale", "aliases": ["alex"]}])
+
+        self.assertEqual(players.get("Ale")["aliases"], ["ale", "alex"])
+
+    def test_basic_template_is_default_but_manual_pathfinder_activation_is_preserved(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        self.assertEqual(templates.active_template()["key"], "personaje_basico")
+
+        conn.execute("UPDATE character_templates SET active = 0")
+        conn.execute("UPDATE character_templates SET active = 1 WHERE key = ?", ("pathfinder_2e",))
+        conn.commit()
+
+        templates = CharacterTemplatesRepository(conn)
+        self.assertEqual(templates.active_template()["key"], "pathfinder_2e")
+
     def test_creates_multiple_characters_for_player_and_template(self):
         conn = self.create_connection()
         templates = CharacterTemplatesRepository(conn)
         players = PlayersRepository(conn, [{"name": "Ale"}], templates)
         player = players.get("Ale")
+
+        self.assertEqual(templates.active_template()["key"], "personaje_basico")
+        self.assertEqual(templates.active_template()["fields"], [])
 
         first = players.create_character(player["id"], "Kira", "Exploradora", {"class": "Ranger"})
         second = players.create_character(player["id"], "Nox", "Mago", {"class": "Wizard"})
@@ -58,10 +80,7 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(first["personaje"]["playerName"], "Ale")
         self.assertEqual(first["personaje"]["role"], "Exploradora")
         self.assertEqual(len(players.characters_for_player(player["id"])), 3)
-        self.assertEqual(
-            templates.sheet_for_character(first["personaje"]["id"])["fields"][2]["value"],
-            "Ranger",
-        )
+        self.assertEqual(templates.sheet_for_character(first["personaje"]["id"])["fields"], [])
 
     def test_deletes_character_without_deleting_player(self):
         conn = self.create_connection()

@@ -1,12 +1,21 @@
     const BROADCAST = "TODOS";
     const PANEL_STORAGE_KEY = "eva.visiblePanels";
+    const PANEL_VIEW_STORAGE_KEY = "eva.activePanelView";
     const INITIATIVE_STORAGE_KEY = "eva.initiativeTracker";
+    const MEDIA_CACHE_SESSION_KEY = "eva.mediaCacheSessionId";
+    const MEDIA_CACHE_STORAGE_KEY = "eva.mediaCache.items";
     let characters = [];
     let players = [];
     let activeTemplate = null;
     let templates = [];
     let mediaCatalog = [];
+    let cachedMediaItems = [];
+    let nameGeneratorOptions = {
+      personas: [],
+      fantasia: [],
+    };
     let panelVisibility = {};
+    let activePanelView = "all";
     let initiativeState = {
       turnIndex: 0,
       combatants: [],
@@ -15,15 +24,21 @@
     let activeCharacterDetailName = null;
     let activeCharacterDetailId = null;
     let pendingDeleteCharacter = null;
+    let activeExchange = null;
     let templateJsonMode = "edit";
     let templateJsonSourceId = null;
     let templateBuilderTab = "builder";
     let templatePreviewPageIndex = 0;
 
     const checksNpcSwitch = document.getElementById("checksNpcSwitch");
+    const viewTabs = [...document.querySelectorAll("[data-panel-filter]")];
     const panelSections = [...document.querySelectorAll("[data-panel]")];
     const settingsModal = document.getElementById("settingsModal");
     const panelOptions = document.getElementById("panelOptions");
+    const exchangeModal = document.getElementById("exchangeModal");
+    const exchangeParticipants = document.getElementById("exchangeParticipants");
+    const exchangeStatus = document.getElementById("exchangeStatus");
+    const exchangeResults = document.getElementById("exchangeResults");
     const templateSelect = document.getElementById("templateSelect");
     const templateLabelInput = document.getElementById("templateLabelInput");
     const templateFieldsEditor = document.getElementById("templateFieldsEditor");
@@ -45,9 +60,14 @@
     const npcPlayerSelect = document.getElementById("npcPlayerSelect");
     const npcRoleInput = document.getElementById("npcRoleInput");
     const npcTemplateFields = document.getElementById("npcTemplateFields");
+    const numeroSelect = document.getElementById("numeroSelect");
+    const paloSelect = document.getElementById("paloSelect");
+    const cardPlayerSelect = document.getElementById("cardPlayerSelect");
     const mediaTargetSelect = document.getElementById("mediaTargetSelect");
     const mediaTypeSelect = document.getElementById("mediaTypeSelect");
     const mediaFileSelect = document.getElementById("mediaFileSelect");
+    const mediaGallery = document.getElementById("mediaGallery");
+    const cachedMediaList = document.getElementById("cachedMediaList");
     const countdownTargetSelect = document.getElementById("countdownTargetSelect");
     const countdownSecondsInput = document.getElementById("countdownSecondsInput");
     const countdownLabelInput = document.getElementById("countdownLabelInput");
@@ -55,6 +75,11 @@
     const musicStateLabel = document.getElementById("musicStateLabel");
     const musicCurrentTitle = document.getElementById("musicCurrentTitle");
     const killPlayerSelect = document.getElementById("killPlayerSelect");
+    const nameCategorySelect = document.getElementById("nameCategorySelect");
+    const nameSubtypeSelect = document.getElementById("nameSubtypeSelect");
+    const nameGenderField = document.getElementById("nameGenderField");
+    const nameGenderSelect = document.getElementById("nameGenderSelect");
+    const nameResults = document.getElementById("nameResults");
     const statusMessage = document.getElementById("statusMessage");
     const statusLog = document.getElementById("statusLog");
     const playerSummary = document.getElementById("playerSummary");
@@ -74,6 +99,17 @@
     const initiativeScoreInput = document.getElementById("initiativeScoreInput");
     const initiativeHpInput = document.getElementById("initiativeHpInput");
     const initiativeList = document.getElementById("initiativeList");
+    const doorCombinationSelect = document.getElementById("doorCombinationSelect");
+    const doorLengthInput = document.getElementById("doorLengthInput");
+    const doorAtLeastCountInput = document.getElementById("doorAtLeastCountInput");
+    const doorAtLeastKindSelect = document.getElementById("doorAtLeastKindSelect");
+    const doorSuitModeSelect = document.getElementById("doorSuitModeSelect");
+    const doorSuitSelect = document.getElementById("doorSuitSelect");
+    const doorRankFilterSelect = document.getElementById("doorRankFilterSelect");
+    const doorColorSelect = document.getElementById("doorColorSelect");
+    const doorParitySelect = document.getElementById("doorParitySelect");
+    const doorSummary = document.getElementById("doorSummary");
+    const doorResults = document.getElementById("doorResults");
 
     function populateSelects() {
       const activePlayers = players.filter((player) => player.active);
@@ -81,6 +117,7 @@
 
       fillSelect(killPlayerSelect, activeNames, { preserveSelection: true });
       fillSelect(npcPlayerSelect, activePlayers.map((player) => ({ value: player.id, label: player.nombre })), { preserveSelection: true });
+      fillSelect(cardPlayerSelect, activeNames, { preserveSelection: true });
       fillSelect(mediaTargetSelect, [BROADCAST, ...activeNames], { preserveSelection: true });
       fillSelect(countdownTargetSelect, [BROADCAST, ...activeNames], { preserveSelection: true });
     }
@@ -142,6 +179,7 @@
 
     function loadPanelVisibility() {
       const saved = readLocalJson(PANEL_STORAGE_KEY, {});
+      activePanelView = localStorage.getItem(PANEL_VIEW_STORAGE_KEY) || "all";
       panelVisibility = {};
 
       for (const section of panelSections) {
@@ -150,13 +188,32 @@
       }
 
       applyPanelVisibility();
+      renderPanelViewTabs();
       renderPanelOptions();
     }
 
     function applyPanelVisibility() {
       for (const section of panelSections) {
         const key = section.dataset.panel;
-        section.style.display = panelVisibility[key] === false ? "none" : "";
+        const group = section.dataset.panelGroup || "admin";
+        const visibleInSettings = panelVisibility[key] !== false;
+        const visibleInView = activePanelView === "all" || group === activePanelView || group === "table";
+        section.style.display = visibleInSettings && visibleInView ? "" : "none";
+      }
+    }
+
+    function setPanelView(view) {
+      activePanelView = view || "all";
+      localStorage.setItem(PANEL_VIEW_STORAGE_KEY, activePanelView);
+      renderPanelViewTabs();
+      applyPanelVisibility();
+    }
+
+    function renderPanelViewTabs() {
+      for (const tab of viewTabs) {
+        const active = tab.dataset.panelFilter === activePanelView;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-pressed", active ? "true" : "false");
       }
     }
 

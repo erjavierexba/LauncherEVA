@@ -1,6 +1,6 @@
   <main>
     <div class="command-grid">
-      <section data-panel="players" data-panel-title="Ver jugadores">
+      <section data-panel="players" data-panel-title="Ver jugadores" data-panel-group="table">
         <h2>Ver jugadores</h2>
         <div class="command-body">
           <div class="status-panel">
@@ -16,7 +16,7 @@
         </div>
       </section>
 
-      <section data-panel="templates" data-panel-title="Plantillas">
+      <section class="internal-template-tools" hidden aria-hidden="true">
         <h2>Plantillas</h2>
         <div class="command-body">
           <div class="grid">
@@ -44,7 +44,52 @@
         </div>
       </section>
 
-      <section data-panel="npc" data-panel-title="Crear personaje">
+      <section data-panel="cards" data-panel-title="Dar carta" data-panel-group="cards">
+        <h2>Dar carta</h2>
+        <div class="command-body">
+          <div class="grid">
+            <div>
+              <label>Número</label>
+              <select id="numeroSelect">
+                <option value="as">As</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="jota">Jota</option>
+                <option value="reina">Reina</option>
+                <option value="rey">Rey</option>
+                <option value="joker">Joker</option>
+                <option value="joker dorado">Joker dorado</option>
+              </select>
+            </div>
+            <div>
+              <label>Palo</label>
+              <select id="paloSelect">
+                <option value="picas">Picas</option>
+                <option value="corazones">Corazones</option>
+                <option value="diamantes">Diamantes</option>
+                <option value="treboles">Tréboles</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label>Jugador</label>
+            <select id="cardPlayerSelect"></select>
+          </div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="assignButton">Enviar</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="npc" data-panel-title="Crear personaje" data-panel-group="admin">
         <h2>Crear personaje</h2>
         <div class="command-body">
           <div>
@@ -67,7 +112,7 @@
         </div>
       </section>
 
-      <section data-panel="media" data-panel-title="Enviar Archivo">
+      <section data-panel="media" data-panel-title="Enviar Archivo" data-panel-group="scene">
         <h2>Enviar Archivo</h2>
         <div class="command-body">
           <div class="row">
@@ -90,15 +135,21 @@
             <label>Archivo</label>
             <select id="mediaFileSelect"></select>
           </div>
+          <div id="mediaGallery" class="media-gallery" aria-label="Archivos disponibles"></div>
           <div class="command-spacer"></div>
           <div class="command-actions">
             <button id="mediaPreviewButton" class="secondary">Previsualizar</button>
             <button id="mediaButton">Enviar archivo</button>
           </div>
+          <div class="cached-media-header">
+            <h3>Archivos guardados</h3>
+            <button id="clearMediaCacheButton" class="compact danger" type="button">Borrar cache</button>
+          </div>
+          <div id="cachedMediaList" class="cached-media-list" aria-label="Archivos guardados"></div>
         </div>
       </section>
 
-      <section data-panel="countdown" data-panel-title="Countdown">
+      <section data-panel="countdown" data-panel-title="Countdown" data-panel-group="scene">
         <h2>Countdown</h2>
         <div class="command-body">
           <div class="grid">
@@ -121,7 +172,7 @@
         </div>
       </section>
 
-      <section data-panel="music" data-panel-title="Música">
+      <section data-panel="music" data-panel-title="Música" data-panel-group="scene">
         <h2>Música</h2>
         <div class="command-body">
           <div class="now-playing">
@@ -147,7 +198,116 @@
         </div>
       </section>
 
-      <section data-panel="special" data-panel-title="Órdenes especiales">
+      <section data-panel="doors" data-panel-title="Puertas" data-panel-group="cards">
+        <h2>Puertas</h2>
+        <div class="command-body">
+          <div class="grid">
+            <div>
+              <label>Combinación</label>
+              <select id="doorCombinationSelect">
+                <option value="at_least">Al menos...</option>
+                <option value="pair">Pareja</option>
+                <option value="three">Trío</option>
+                <option value="four">Poker</option>
+                <option value="full_house">Full house</option>
+                <option value="straight">Escalera</option>
+                <option value="flush">Palo / color</option>
+              </select>
+            </div>
+            <div>
+              <label>Huecos</label>
+              <input id="doorLengthInput" type="number" min="1" max="13" value="3" />
+            </div>
+          </div>
+          <div class="grid">
+            <div>
+              <label>Al menos</label>
+              <input id="doorAtLeastCountInput" type="number" min="1" max="13" value="3" />
+            </div>
+            <div>
+              <label>Tipo</label>
+              <select id="doorAtLeastKindSelect">
+                <option value="odd">Impares</option>
+                <option value="even">Pares</option>
+                <option value="figures">Figuras</option>
+                <option value="red">Rojas</option>
+                <option value="black">Negras</option>
+                <option value="same_suit">Mismo palo</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid">
+            <div>
+              <label>Palo</label>
+              <select id="doorSuitModeSelect">
+                <option value="any">Sin filtro</option>
+                <option value="same">Un palo a elegir</option>
+                <option value="specific">Palo impuesto</option>
+              </select>
+            </div>
+            <div>
+              <label>Palo impuesto</label>
+              <select id="doorSuitSelect">
+                <option value="picas">Picas</option>
+                <option value="corazones">Corazones</option>
+                <option value="diamantes">Diamantes</option>
+                <option value="treboles">Tréboles</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid">
+            <div>
+              <label>Rango</label>
+              <select id="doorRankFilterSelect">
+                <option value="any">Cualquiera</option>
+                <option value="figures">Solo figuras</option>
+              </select>
+            </div>
+            <div>
+              <label>Color</label>
+              <select id="doorColorSelect">
+                <option value="any">Cualquiera</option>
+                <option value="red">Solo rojas</option>
+                <option value="black">Solo negras</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label>Paridad</label>
+            <select id="doorParitySelect">
+              <option value="any">Cualquiera</option>
+              <option value="even">Solo pares</option>
+              <option value="odd">Solo impares</option>
+            </select>
+          </div>
+          <div id="doorSummary" class="door-summary">Puerta preparada.</div>
+          <div id="doorResults" class="door-results"></div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="doorEvaluateButton">Abrir puerta</button>
+            <button id="doorCancelButton" class="secondary">Cancelar</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="exchanges" data-panel-title="Intercambios" data-panel-group="cards">
+        <h2>Intercambios</h2>
+        <div class="command-body">
+          <div class="status-panel">
+            <div class="status-panel-title">Puesto activo</div>
+            <div id="exchangeStatus" class="status-panel-value">Sin puesto activo.</div>
+            <div class="status-panel-note">Abre una ventana temporal para que un jugador envíe una carta.</div>
+          </div>
+          <div id="exchangeResults" class="door-results"></div>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="openExchangeButton">Abrir puesto</button>
+            <button id="cancelExchangeButton" class="secondary">Cancelar puesto</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="special" data-panel-title="Órdenes especiales" data-panel-group="admin">
         <h2>Órdenes especiales</h2>
         <div class="command-body">
           <div class="row">
@@ -163,7 +323,40 @@
         </div>
       </section>
 
-      <section class="status-command" data-panel="status" data-panel-title="Estado">
+      <section data-panel="names" data-panel-title="Generador de nombres" data-panel-group="admin">
+        <h2>Generador de nombres</h2>
+        <div class="command-body">
+          <div class="grid">
+            <div>
+              <label>Tipo</label>
+              <select id="nameCategorySelect">
+                <option value="persona">Persona</option>
+                <option value="fantasia">Fantasía</option>
+                <option value="ciudad">Ciudad fantástica</option>
+              </select>
+            </div>
+            <div>
+              <label>Origen / raza</label>
+              <select id="nameSubtypeSelect"></select>
+            </div>
+          </div>
+          <div id="nameGenderField">
+            <label>Sexo</label>
+            <select id="nameGenderSelect">
+              <option value="any">Mixto</option>
+              <option value="female">Femenino</option>
+              <option value="male">Masculino</option>
+            </select>
+          </div>
+          <ul id="nameResults" class="name-results"></ul>
+          <div class="command-spacer"></div>
+          <div class="command-actions">
+            <button id="generateNamesButton">Generar 10</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="status-command" data-panel="status" data-panel-title="Estado" data-panel-group="table">
         <h2>Estado</h2>
         <div class="command-body">
           <div class="status-panel">
@@ -176,12 +369,12 @@
         </div>
       </section>
 
-      <section data-panel="initiative" data-panel-title="Iniciativa">
-        <h2>Iniciativa</h2>
+      <section data-panel="initiative" data-panel-title="Combate" data-panel-group="combat">
+        <h2>Tracker de combate</h2>
         <div class="command-body">
           <div class="initiative-summary">
             <div id="initiativeCurrent" class="initiative-current">Sin combate activo</div>
-            <div id="initiativeNote" class="initiative-note">Añade participantes y ordénalos por iniciativa.</div>
+            <div id="initiativeNote" class="initiative-note">Añade participantes, arrastra para ordenar y registra daño/notas.</div>
           </div>
           <div class="grid">
             <div>

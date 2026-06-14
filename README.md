@@ -149,14 +149,15 @@ El launcher prioriza esas rutas cuando existen.
 1. Abre Launcher EVA.
 2. En **Rol y release**, escribe el nombre del rol, paquete Android, rutas de EVA y Horus.
 3. Revisa las rutas internas si hace falta y pulsa **Guardar configuración y propagar**.
-4. Configura Firebase si quieres notificaciones push.
+4. Configura Firebase si quieres notificaciones push en Horus APK o Horus PWA.
 5. Ajusta colores en **Tema EVA**.
-6. Añade jugadores.
-7. Sube archivos, bromas y música.
-8. Pulsa **Pull ambos public_release** si quieres actualizar los proyectos.
-9. Pulsa **Preparar workflow completo** para crear copia segura e instalar dependencias.
-10. Pulsa **Arrancar EVA**.
-11. Abre el panel de EVA o genera la release de Horus.
+6. Selecciona el microfono de EVA si no quieres usar el predeterminado.
+7. Añade jugadores.
+8. Sube archivos, bromas y música.
+9. Pulsa **Pull ambos public_release** si quieres actualizar los proyectos.
+10. Pulsa **Preparar workflow completo** para crear copia segura e instalar dependencias.
+11. Pulsa **Arrancar EVA**.
+12. Abre el panel de EVA, abre Horus PWA o genera la release APK de Horus.
 
 ## Secciones Del Panel
 
@@ -200,6 +201,8 @@ Texto secundario de la pantalla inicial de Horus.
 - `Remote EVA opcional`: URL git para clonar EVA si la carpeta no existe.
 - `Remote Horus opcional`: URL git para clonar Horus si la carpeta no existe.
 - `Puerto web EVA`: normalmente `8080`.
+- `Puerto Horus PWA`: normalmente `8081`.
+- `Microfono EVA`: dispositivo de entrada que EVA usará para escuchar comandos.
 
 **Guardar configuración y propagar**
 
@@ -209,7 +212,45 @@ Este botón aplica los cambios en ambos proyectos:
 - Genera/actualiza `src/config/brand.ts` en Horus.
 - Actualiza `app.json` y `package.json` de Horus.
 - Actualiza colores de Horus desde el tema configurado.
-- Configura o limpia Firebase según los archivos indicados.
+- Configura red, microfono y Firebase según los archivos indicados.
+
+### Horus PWA
+
+Al arrancar EVA desde el launcher se levanta también Horus PWA en el puerto configurado.
+Por defecto:
+
+```text
+EVA:   http://localhost:8080
+Horus: http://localhost:8081
+```
+
+El botón **Abrir Horus** abre esa PWA local. En móviles de la red se usa la IP del equipo
+que ejecuta EVA con el mismo puerto.
+
+### Firebase
+
+El launcher acepta tres archivos:
+
+- `Service account EVA JSON`: cuenta de servicio del backend para enviar FCM.
+- `google-services app JSON`: configuración de la APK Horus Android.
+- `Firebase web / VAPID JSON`: configuración para Horus PWA.
+
+El JSON web puede tener este formato:
+
+```json
+{
+  "public": "CLAVE_VAPID_PUBLICA",
+  "private": "CLAVE_VAPID_PRIVADA",
+  "firebaseConfig": {
+    "apiKey": "...",
+    "projectId": "...",
+    "messagingSenderId": "...",
+    "appId": "..."
+  }
+}
+```
+
+Al guardar, el launcher lo propaga a `config/eva.config.json -> firebase.web`.
 
 ### Iconos de Horus
 

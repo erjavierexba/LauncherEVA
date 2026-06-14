@@ -62,6 +62,7 @@ Abre los puertos necesarios en el firewall:
 ```bash
 sudo ufw allow 8765/tcp
 sudo ufw allow 8080/tcp
+sudo ufw allow 8081/tcp
 ```
 
 Comprueba el estado del firewall:
@@ -76,11 +77,41 @@ Puertos usados:
 | --- | --- |
 | `8765` | WebSocket |
 | `8080` | Servidor HTTP / archivos multimedia |
+| `8081` | Horus PWA para jugadores |
 
 La app cliente debe configurarse con la dirección HTTP de EVA, por ejemplo:
 
 ```txt
 192.168.1.42:8080
+```
+
+Horus se abre desde el navegador del jugador en el puerto PWA:
+
+```txt
+192.168.1.42:8081
+```
+
+Para instalarla como PWA, el navegador puede exigir HTTPS salvo en `localhost`.
+
+Para que Horus registre notificaciones web con Firebase, el launcher debe escribir la configuración
+en `config/eva.config.json -> firebase.web`:
+
+```json
+{
+  "firebase": {
+    "serviceAccountPath": "config/firebase-service-account.json",
+    "web": {
+      "vapidPublicKey": "CLAVE_VAPID_PUBLICA",
+      "vapidPrivateKey": "CLAVE_VAPID_PRIVADA",
+      "firebaseConfig": {
+        "apiKey": "...",
+        "projectId": "...",
+        "messagingSenderId": "...",
+        "appId": "..."
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -325,6 +356,7 @@ ip a
 ```bash
 sudo ufw allow 8765/tcp
 sudo ufw allow 8080/tcp
+sudo ufw allow 8081/tcp
 
 python -m venv .venv
 source .venv/bin/activate
