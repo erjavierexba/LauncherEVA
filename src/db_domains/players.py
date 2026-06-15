@@ -78,6 +78,7 @@ class PlayersRepository:
                 template_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(player_id, template_id, name),
@@ -85,6 +86,15 @@ class PlayersRepository:
                 FOREIGN KEY(template_id) REFERENCES character_templates(id)
             )
         """)
+        self._ensure_character_columns()
+
+    def _ensure_character_columns(self):
+        columns = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(player_characters)").fetchall()
+        }
+        if "notes" not in columns:
+            self.conn.execute("ALTER TABLE player_characters ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
 
     def _ensure_legacy_characters(self):
         if self.character_templates is None:
@@ -328,7 +338,7 @@ class PlayersRepository:
     def all_characters(self):
         rows = self.conn.execute(
             """
-            SELECT c.id, c.player_id, c.template_id, c.name, c.role, c.active, c.created_at,
+            SELECT c.id, c.player_id, c.template_id, c.name, c.role, c.notes, c.active, c.created_at,
                    p.nombre AS player_name, p.aliases, p.npc, p.active AS player_active,
                    p.eliminated_at,
                    t.key AS template_key, t.label AS template_label
@@ -351,7 +361,7 @@ class PlayersRepository:
     def get_character(self, character_id: int):
         row = self.conn.execute(
             """
-            SELECT c.id, c.player_id, c.template_id, c.name, c.role, c.active, c.created_at,
+            SELECT c.id, c.player_id, c.template_id, c.name, c.role, c.notes, c.active, c.created_at,
                    p.nombre AS player_name, p.aliases, p.npc, p.active AS player_active,
                    p.eliminated_at,
                    t.key AS template_key, t.label AS template_label
@@ -365,14 +375,15 @@ class PlayersRepository:
 
         return self._character_from_row(row) if row else None
 
-    def create_character(self, player_id: int, name: str, role: str, fields: dict | None = None):
+    def create_character(self, player_id: int, name: str, role: str = "", fields: dict | None = None, notes: str = "", template_id: int | None = None):
         clean_name = (name or "").strip()
         clean_role = (role or "").strip()
+        clean_notes = (notes or "").strip()
 
-        if not clean_name or not clean_role:
+        if not clean_name:
             return {
                 "ok": False,
-                "mensaje": "Faltan nombre o rol del personaje.",
+                "mensaje": "Falta el nombre del personaje.",
             }
 
         player = self.conn.execute(
@@ -385,20 +396,22 @@ class PlayersRepository:
                 "mensaje": "Jugador no encontrado.",
             }
 
-        template = self.character_templates.active_template() if self.character_templates is not None else None
+        template = self.character_templates.get_template(template_id) if self.character_templates is not None and template_id else (
+            self.character_templates.active_template() if self.character_templates is not None else None
+        )
         if template is None:
             return {
                 "ok": False,
-                "mensaje": "No hay plantilla activa.",
+                "mensaje": "No hay plantilla/manual disponible.",
             }
 
         try:
             cursor = self.conn.execute(
                 """
-                INSERT INTO player_characters (player_id, template_id, name, role, active)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT INTO player_characters (player_id, template_id, name, role, notes, active)
+                VALUES (?, ?, ?, ?, ?, 1)
                 """,
-                (player_id, template["id"], clean_name, clean_role),
+                (player_id, template["id"], clean_name, clean_role, clean_notes),
             )
         except Exception:
             return {
@@ -415,6 +428,47 @@ class PlayersRepository:
             "ok": True,
             "mensaje": f"Personaje {clean_name} creado.",
             "personaje": self.get_character(cursor.lastrowid),
+        }
+
+    def update_character(self, character_id: int, name: str | None = None, notes: str | None = None, role: str | None = None):
+        character = self.get_character(character_id)
+
+        if character is None:
+            return {
+                "ok": False,
+                "mensaje": "Personaje no encontrado.",
+            }
+
+        clean_name = (name if name is not None else character["name"] or "").strip()
+        clean_notes = (notes if notes is not None else character.get("notes", "") or "").strip()
+        clean_role = (role if role is not None else character.get("role", "") or "").strip()
+
+        if not clean_name:
+            return {
+                "ok": False,
+                "mensaje": "Falta el nombre del personaje.",
+            }
+
+        try:
+            self.conn.execute(
+                """
+                UPDATE player_characters
+                SET name = ?, role = ?, notes = ?
+                WHERE id = ?
+                """,
+                (clean_name, clean_role, clean_notes, character_id),
+            )
+            self.conn.commit()
+        except Exception:
+            return {
+                "ok": False,
+                "mensaje": "No se pudo actualizar el personaje. Revisa si ya existe ese nombre.",
+            }
+
+        return {
+            "ok": True,
+            "mensaje": f"Personaje {clean_name} actualizado.",
+            "personaje": self.get_character(character_id),
         }
 
     def delete_character(self, character_id: int):
@@ -450,6 +504,8 @@ class PlayersRepository:
             "nombre": row["name"],
             "role": row["role"],
             "rol": row["role"],
+            "notes": row["notes"],
+            "notas": row["notes"],
             "active": active,
             "createdAt": row["created_at"],
             "playerId": row["player_id"],

@@ -44,12 +44,11 @@
 
         const name = document.createElement("div");
         name.className = "player-name";
-        const type = personaje.role || personaje.rol || "Personaje";
         const nameText = document.createElement("span");
-        nameText.textContent = `#${personaje.id} · ${personaje.nombre}`;
+        nameText.textContent = `${personaje.playerName || personaje.username} / ${personaje.nombre}`;
         const badge = document.createElement("span");
         badge.className = "badge";
-        badge.textContent = `${type} · ${personaje.playerName || personaje.username}`;
+        badge.textContent = personaje.notes || personaje.template?.label || "Personaje";
         name.appendChild(nameText);
         name.appendChild(badge);
 
@@ -672,7 +671,7 @@
 
       const meta = document.createElement("div");
       meta.className = "character-meta";
-      meta.textContent = `${personaje.playerName || personaje.username} · ${personaje.role || personaje.rol || "Sin rol"} · ${personaje.sheet?.template?.label || personaje.template?.label || "Ficha"}`;
+      meta.textContent = `${personaje.playerName || personaje.username} / ${personaje.nombre} · ${personaje.notes || "Sin notas"} · ${personaje.sheet?.template?.label || personaje.template?.label || "Ficha"}`;
       characterDetailBody.appendChild(meta);
 
       const sheetFields = personaje.sheet?.fields || [];

@@ -263,6 +263,47 @@ h2 {
   font-size: 15px;
 }
 
+.character-manager {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: grid;
+  gap: 10px;
+}
+
+.character-form {
+  display: grid;
+  gap: 8px;
+}
+
+.character-crud-list {
+  display: grid;
+  gap: 8px;
+}
+
+.character-crud-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0f141b;
+}
+
+.character-crud-title {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.character-crud-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .field-grid {
   display: grid;
   gap: 10px;

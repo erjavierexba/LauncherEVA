@@ -9,8 +9,6 @@ let characters = [];
 let mediaItems = [];
 let rollHistory = [];
 let countdownTimer = null;
-let deferredInstallPrompt = null;
-let serviceWorkerRegistration = null;
 
 const loginView = document.getElementById("loginView");
 const appView = document.getElementById("appView");
@@ -25,7 +23,10 @@ const countdownPanel = document.getElementById("countdownPanel");
 const mediaDialog = document.getElementById("mediaDialog");
 const mediaTitle = document.getElementById("mediaTitle");
 const mediaBody = document.getElementById("mediaBody");
-const installButton = document.getElementById("installButton");
+const characterForm = document.getElementById("characterForm");
+const characterNameInput = document.getElementById("characterNameInput");
+const characterNotesInput = document.getElementById("characterNotesInput");
+const characterCrudList = document.getElementById("characterCrudList");
 const diceFormulaInput = document.getElementById("diceFormulaInput");
 const diceFormulaResult = document.getElementById("diceFormulaResult");
 const rollHistoryList = document.getElementById("rollHistoryList");
@@ -110,6 +111,17 @@ function showApp() {
   loadRollHistory();
 }
 
+async function unregisterLegacyServiceWorkers() {
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  }
+  if ("caches" in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((key) => caches.delete(key)));
+  }
+}
+
 async function login(name) {
   const data = await api("/api/login", {
     method: "POST",
@@ -133,24 +145,99 @@ async function refreshState() {
   setStatus("Sincronizado con EVA.");
 }
 
-async function getServiceWorkerRegistration() {
-  if (!("serviceWorker" in navigator)) {
-    throw new Error("Este navegador no soporta service workers.");
-  }
-
-  if (serviceWorkerRegistration) {
-    return serviceWorkerRegistration;
-  }
-
-  serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js");
-  await navigator.serviceWorker.ready;
-  return serviceWorkerRegistration;
-}
-
 function renderAll() {
+  renderCharacterCrud();
   renderSheet();
   renderMedia();
   renderRollHistory();
+}
+
+function renderCharacterCrud() {
+  characterCrudList.innerHTML = "";
+
+  if (!characters.length) {
+    characterCrudList.appendChild(empty("Sin personajes."));
+    return;
+  }
+
+  for (const character of characters) {
+    const row = document.createElement("form");
+    row.className = "character-crud-item";
+    row.dataset.characterId = character.id;
+
+    const title = document.createElement("div");
+    title.className = "character-crud-title";
+    title.textContent = `${username} / ${character.nombre}`;
+
+    const name = document.createElement("input");
+    name.value = character.nombre || "";
+    name.placeholder = "Nombre";
+
+    const notes = document.createElement("textarea");
+    notes.value = character.notes || "";
+    notes.rows = 2;
+    notes.placeholder = "Notas";
+
+    const actions = document.createElement("div");
+    actions.className = "character-crud-actions";
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "secondary";
+    save.textContent = "Guardar";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "Eliminar";
+    actions.append(save, remove);
+
+    row.append(title, name, notes, actions);
+    row.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await updateCharacter(character.id, name.value, notes.value);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    });
+    remove.addEventListener("click", async () => {
+      try {
+        await deleteCharacter(character.id);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    });
+    characterCrudList.appendChild(row);
+  }
+}
+
+async function createCharacter(name, notes) {
+  const data = await api("/api/characters", {
+    method: "POST",
+    body: JSON.stringify({
+      username,
+      nombre: name,
+      notes,
+    }),
+  });
+  setStatus(data.mensaje || "Personaje creado.");
+  await refreshState();
+}
+
+async function updateCharacter(characterId, name, notes) {
+  const data = await api(`/api/characters/${encodeURIComponent(characterId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ nombre: name, notes }),
+  });
+  setStatus(data.mensaje || "Personaje actualizado.");
+  await refreshState();
+}
+
+async function deleteCharacter(characterId) {
+  const data = await api(`/api/characters/${encodeURIComponent(characterId)}`, {
+    method: "DELETE",
+  });
+  setStatus(data.mensaje || "Personaje eliminado.");
+  await refreshState();
 }
 
 function renderSheet() {
@@ -574,11 +661,6 @@ async function resetClientApp() {
   localStorage.removeItem(MEDIA_SESSION_KEY);
   localStorage.removeItem(MEDIA_STORAGE_KEY);
 
-  if ("caches" in window) {
-    const keys = await caches.keys();
-    await Promise.all(keys.map((key) => caches.delete(key)));
-  }
-
   window.location.reload();
 }
 
@@ -850,6 +932,16 @@ document.getElementById("logoutButton").addEventListener("click", () => {
   showLogin();
 });
 document.getElementById("saveSheetButton").addEventListener("click", saveSheet);
+characterForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await createCharacter(characterNameInput.value.trim(), characterNotesInput.value.trim());
+    characterNameInput.value = "";
+    characterNotesInput.value = "";
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error));
+  }
+});
 document.getElementById("clearMediaButton").addEventListener("click", () => {
   mediaItems = [];
   saveMediaItems();
@@ -867,28 +959,19 @@ document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => setActiveView(tab.dataset.view));
 });
 
-window.addEventListener("beforeinstallprompt", (event) => {
-  event.preventDefault();
-  deferredInstallPrompt = event;
-  installButton.hidden = false;
+window.addEventListener("focus", () => {
+  if (username) refreshState().catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
 });
-
-installButton.addEventListener("click", async () => {
-  if (!deferredInstallPrompt) {
-    return;
-  }
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt = null;
-  installButton.hidden = true;
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && username) refreshState().catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
 });
-
-getServiceWorkerRegistration().catch((error) => {
-  setStatus(error instanceof Error ? error.message : String(error));
+window.addEventListener("online", () => {
+  if (username) refreshState().catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
 });
 
 loadMediaItems();
 connectWebSocket();
+unregisterLegacyServiceWorkers().catch(() => {});
 
 if (username) {
   showApp();

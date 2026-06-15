@@ -82,6 +82,44 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(len(players.characters_for_player(player["id"])), 3)
         self.assertEqual(templates.sheet_for_character(first["personaje"]["id"])["fields"], [])
 
+    def test_creates_character_with_notes_for_selected_template(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        created_template = templates.create_template("manual_custom", "Manual custom", {
+            "id": "manual_custom",
+            "name": "Manual custom",
+            "fields": [{"key": "concept", "label": "Concepto", "type": "text"}],
+            "pages": [],
+        })["template"]
+        players = PlayersRepository(conn, [{"name": "Ale"}], templates)
+        player = players.get("Ale")
+
+        result = players.create_character(
+            player["id"],
+            "Kira",
+            fields={"concept": "Exploradora"},
+            notes="Tiene una deuda pendiente.",
+            template_id=created_template["id"],
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["personaje"]["notes"], "Tiene una deuda pendiente.")
+        self.assertEqual(result["personaje"]["template"]["key"], "manual_custom")
+        self.assertEqual(templates.sheet_for_character(result["personaje"]["id"])["fields"][0]["value"], "Exploradora")
+
+    def test_updates_character_name_and_notes(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        players = PlayersRepository(conn, [{"name": "Ale"}], templates)
+        player = players.get("Ale")
+        created = players.create_character(player["id"], "Kira")
+
+        result = players.update_character(created["personaje"]["id"], name="Kira Nox", notes="Nota nueva")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["personaje"]["nombre"], "Kira Nox")
+        self.assertEqual(result["personaje"]["notes"], "Nota nueva")
+
     def test_deletes_character_without_deleting_player(self):
         conn = self.create_connection()
         templates = CharacterTemplatesRepository(conn)

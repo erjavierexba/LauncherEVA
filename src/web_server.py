@@ -502,6 +502,39 @@ async def api_characters_create(request):
         str(body.get("name") or body.get("nombre") or ""),
         str(body.get("role") or body.get("rol") or ""),
         fields,
+        notes=str(body.get("notes") or body.get("notas") or ""),
+        template_id=parse_positive_int(body.get("templateId") or body.get("template_id")),
+    )
+
+    if result["ok"]:
+        await context.ws_queue.put(template_update_event(context.db))
+
+    return web.json_response(result, status=200 if result["ok"] else 400)
+
+
+async def api_character_update(request):
+    context = request.app["context"]
+    character_id = parse_positive_int(request.match_info["character_id"])
+
+    if character_id is None:
+        return web.json_response({
+            "ok": False,
+            "mensaje": "Personaje inválido.",
+        }, status=400)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({
+            "ok": False,
+            "mensaje": "JSON inválido.",
+        }, status=400)
+
+    result = context.db.players.update_character(
+        character_id,
+        name=body.get("name") if "name" in body else body.get("nombre"),
+        notes=body.get("notes") if "notes" in body else body.get("notas"),
+        role=body.get("role") if "role" in body else body.get("rol"),
     )
 
     if result["ok"]:
@@ -1160,6 +1193,7 @@ async def start_web_server(context):
     app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_post("/api/characters", api_characters_create)
+    app.router.add_put("/api/characters/{character_id}", api_character_update)
     app.router.add_delete("/api/characters/{character_id}", api_character_delete)
     app.router.add_put("/api/characters/by-id/{character_id}/sheet", api_character_sheet_update_by_id)
     app.router.add_put("/api/characters/{username}/sheet", api_character_sheet_update)

@@ -53,7 +53,7 @@
     const templatePhonePreview = document.getElementById("templatePhonePreview");
     const npcNameInput = document.getElementById("npcNameInput");
     const npcPlayerSelect = document.getElementById("npcPlayerSelect");
-    const npcRoleInput = document.getElementById("npcRoleInput");
+    const npcNotesInput = document.getElementById("npcNotesInput");
     const npcTemplateFields = document.getElementById("npcTemplateFields");
     const mediaTargetSelect = document.getElementById("mediaTargetSelect");
     const mediaTypeSelect = document.getElementById("mediaTypeSelect");

@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#111923" />
   <title>{{CLIENT_TITLE}}</title>
   <link rel="icon" type="image/png" href="/favicon.png" />
-  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/horus.css" />
 </head>
 <body>
@@ -31,7 +30,6 @@
           <h1 id="playerName">Jugador</h1>
         </div>
         <div class="topbar-actions">
-          <button id="installButton" class="icon-button" type="button" hidden title="Instalar">+</button>
           <button id="refreshButton" class="icon-button" type="button" title="Refrescar">↻</button>
           <button id="logoutButton" class="icon-button danger" type="button" title="Salir">×</button>
         </div>
@@ -48,6 +46,15 @@
         <div class="section-header">
           <h2>Ficha</h2>
           <button id="saveSheetButton" class="secondary" type="button">Guardar</button>
+        </div>
+        <div class="character-manager">
+          <div class="panel-title">Personajes</div>
+          <form id="characterForm" class="character-form">
+            <input id="characterNameInput" autocomplete="off" placeholder="Nombre del personaje" />
+            <textarea id="characterNotesInput" rows="2" placeholder="Notas"></textarea>
+            <button type="submit">Crear</button>
+          </form>
+          <div id="characterCrudList" class="character-crud-list"></div>
         </div>
         <div id="sheetList" class="sheet-list"></div>
       </section>

@@ -124,11 +124,11 @@
       const data = await api("/api/characters", {
         playerId: npcPlayerSelect.value,
         nombre: npcNameInput.value,
-        role: npcRoleInput.value,
+        notes: npcNotesInput.value,
         fields,
       });
       npcNameInput.value = "";
-      npcRoleInput.value = "";
+      npcNotesInput.value = "";
       await loadStatus();
       return data;
     }
