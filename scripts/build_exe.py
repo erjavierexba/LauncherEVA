@@ -18,6 +18,9 @@ def main() -> int:
     hidden_imports = [
         "aiohttp",
         "pygame",
+        "PySide6.QtCore",
+        "PySide6.QtWebEngineWidgets",
+        "PySide6.QtWidgets",
         "pyttsx3",
         "requests",
         "sounddevice",

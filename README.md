@@ -24,6 +24,39 @@ http://localhost:8000
 http://localhost:8080
 ```
 
+## Aplicación de escritorio
+
+El ejecutable de escritorio arranca EVA en segundo plano, abre el configurador en una ventana propia y deja publicada la web de jugadores en el puerto cliente.
+
+```bash
+PYTHONPATH=src python3 -m launcher_eva.desktop
+```
+
+Si cambias el puerto EVA o el puerto cliente desde la configuración, la ventana detecta el cambio, reinicia EVA y recarga el configurador en el puerto nuevo.
+
+Al abrir, la app comprueba si la configuración escucha en LAN (`0.0.0.0`) y muestra avisos de firewall. En Linux con UFW activo indicará comandos como:
+
+```bash
+sudo ufw allow 8000/tcp
+sudo ufw allow 8080/tcp
+```
+
+En Windows indicará el comando `netsh advfirewall` equivalente para ejecutar como administrador si los jugadores no pueden conectar.
+
+## Empaquetado
+
+Crear ejecutable portable:
+
+```bash
+python3 scripts/build_exe.py
+```
+
+Crear paquete `.deb`:
+
+```bash
+python3 scripts/build_deb.py
+```
+
 ## Configurador
 
 El configurador propio del launcher se arranca con:
