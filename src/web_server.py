@@ -238,6 +238,7 @@ def config_redirect():
 
 
 def sync_launcher_settings(context):
+    LAUNCHER_STATE.embedded_mode = True
     project = context.config.data.get("project", {})
     server = context.config.data.get("server", {})
     if project.get("roleName"):

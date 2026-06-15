@@ -326,6 +326,34 @@ h2 {
   gap: 8px;
 }
 
+.dice-roller {
+  gap: 9px;
+}
+
+.dice-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.dice-result {
+  min-height: 42px;
+  padding: 10px;
+  border: 1px solid rgba(215, 173, 88, 0.35);
+  border-radius: var(--radius);
+  background: #090d12;
+  color: var(--text);
+  font-weight: 900;
+}
+
+.dice-breakdown {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .exchange-row {
   grid-template-columns: 1fr 1fr auto;
   align-items: end;

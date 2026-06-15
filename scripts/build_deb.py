@@ -49,7 +49,7 @@ def main() -> int:
             Priority: optional
             Architecture: amd64
             Maintainer: Launcher EVA
-            Description: Launcher local autocontenido para EVA y Horus
+            Description: Launcher local autocontenido para EVA y cliente web
             """
         ),
         encoding="utf-8",

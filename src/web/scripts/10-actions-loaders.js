@@ -157,7 +157,7 @@
 
       return {
         ok: true,
-        mensaje: `${data.matchCount} ruta(s) posible(s). Puerta enviada a Horus.`,
+        mensaje: `${data.matchCount} ruta(s) posible(s). Puerta enviada al cliente.`,
       };
     }
 

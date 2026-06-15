@@ -31,6 +31,8 @@ const mediaDialog = document.getElementById("mediaDialog");
 const mediaTitle = document.getElementById("mediaTitle");
 const mediaBody = document.getElementById("mediaBody");
 const installButton = document.getElementById("installButton");
+const diceFormulaInput = document.getElementById("diceFormulaInput");
+const diceFormulaResult = document.getElementById("diceFormulaResult");
 
 function setStatus(message) {
   statusLine.textContent = message;
@@ -686,6 +688,73 @@ function empty(text) {
   return element;
 }
 
+function rollFormula(rawFormula) {
+  const formula = String(rawFormula || "").replace(/\s+/g, "").toLowerCase();
+  if (!formula) {
+    throw new Error("Escribe una fórmula.");
+  }
+
+  const tokenPattern = /([+-]?)(?:(\d*)d([1-9]\d*)|(\d+))/g;
+  const terms = [];
+  let cursor = 0;
+  let match = tokenPattern.exec(formula);
+
+  while (match) {
+    if (match.index !== cursor) {
+      throw new Error("Fórmula inválida.");
+    }
+
+    const sign = match[1] === "-" ? -1 : 1;
+    if (match[3]) {
+      const count = match[2] ? Number.parseInt(match[2], 10) : 1;
+      const faces = Number.parseInt(match[3], 10);
+      if (count <= 0 || count > 100 || faces <= 0 || faces > 10000) {
+        throw new Error("Demasiados dados.");
+      }
+      const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
+      const total = sign * rolls.reduce((sum, roll) => sum + roll, 0);
+      terms.push({ kind: "dice", sign, count, faces, rolls, total });
+    } else {
+      const value = Number.parseInt(match[4], 10);
+      terms.push({ kind: "modifier", sign, value, total: sign * value });
+    }
+
+    cursor = tokenPattern.lastIndex;
+    match = tokenPattern.exec(formula);
+  }
+
+  if (cursor !== formula.length || terms.length === 0) {
+    throw new Error("Fórmula inválida.");
+  }
+
+  return {
+    formula,
+    terms,
+    total: terms.reduce((sum, term) => sum + term.total, 0),
+  };
+}
+
+function formatRollBreakdown(result) {
+  return result.terms
+    .map((term, index) => {
+      const prefix = term.sign < 0 ? "-" : index === 0 ? "" : "+";
+      if (term.kind === "dice") {
+        return `${prefix}${term.count}d${term.faces}[${term.rolls.join(",")}]`;
+      }
+      return `${prefix}${term.value}`;
+    })
+    .join(" ");
+}
+
+function handleFormulaRoll() {
+  try {
+    const result = rollFormula(diceFormulaInput.value);
+    diceFormulaResult.innerHTML = `${result.total}<span class="dice-breakdown">${result.formula} · ${formatRollBreakdown(result)}</span>`;
+  } catch (error) {
+    diceFormulaResult.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
 function setActiveView(view) {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === view);
@@ -719,6 +788,13 @@ document.getElementById("clearMediaButton").addEventListener("click", () => {
   renderMedia();
 });
 document.getElementById("closeMediaButton").addEventListener("click", closeMedia);
+document.getElementById("rollFormulaButton").addEventListener("click", handleFormulaRoll);
+diceFormulaInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    handleFormulaRoll();
+  }
+});
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => setActiveView(tab.dataset.view));
 });

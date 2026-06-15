@@ -328,6 +328,7 @@ class LauncherState:
         self.logs: list[str] = []
         self.events: queue.Queue[str] = queue.Queue()
         self.eva_process: subprocess.Popen | None = None
+        self.embedded_mode = False
         self.lock = threading.Lock()
 
     def log(self, message: str) -> None:
@@ -961,7 +962,7 @@ def render_page() -> str:
     settings = STATE.settings
     role_name = settings.get("role_name", "EVA")
     default_package = settings.get("android_package") or f"com.eva.{package_slug(role_name)}"
-    eva_running = STATE.eva_process is not None and STATE.eva_process.poll() is None
+    eva_running = STATE.embedded_mode or (STATE.eva_process is not None and STATE.eva_process.poll() is None)
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
     log_text = "\n".join(STATE.logs[-180:])
@@ -987,6 +988,15 @@ def render_page() -> str:
         f'<option value="{h(device["id"])}" {"selected" if device["id"] == selected_microphone else ""}>{h(device["label"])}</option>'
         for device in microphones
     )
+    if STATE.embedded_mode:
+        runtime_controls = (
+            '<span class="embedded-note">EVA está arrancada desde main.py</span>'
+        )
+    else:
+        runtime_controls = (
+            '<form method="post" action="/start-eva"><button>Arrancar EVA</button></form>'
+            '<form method="post" action="/stop-eva"><button>Detener EVA</button></form>'
+        )
     return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -1012,6 +1022,7 @@ def render_page() -> str:
     button.primary {{ background:#1f4f66; border-color:var(--accent); }}
     button:hover, a.button:hover {{ border-color:var(--accent); }}
     .actions {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }}
+    .embedded-note {{ min-height:36px; display:inline-flex; align-items:center; color:var(--muted); font-weight:800; }}
     table {{ width:100%; border-collapse:collapse; }}
     th, td {{ border-bottom:1px solid #2b3543; padding:8px; text-align:left; vertical-align:top; }}
     th {{ color:var(--muted); font-size:12px; text-transform:uppercase; }}
@@ -1027,8 +1038,7 @@ def render_page() -> str:
   <div class="actions">
     <a class="button" href="http://localhost:{h(settings.get('web_port', '8000'))}/" target="_blank">Abrir EVA</a>
     <a class="button" href="http://localhost:{h(settings.get('client_port', '8080'))}/" target="_blank">Abrir Cliente</a>
-    <form method="post" action="/start-eva"><button>Arrancar EVA</button></form>
-    <form method="post" action="/stop-eva"><button>Detener EVA</button></form>
+    {runtime_controls}
   </div>
 </header>
 <main>
