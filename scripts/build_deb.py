@@ -36,10 +36,6 @@ def main() -> int:
     shutil.copyfile(binary, opt_dir / "LauncherEVA")
     (opt_dir / "LauncherEVA").chmod(0o755)
 
-    vendor = ROOT / "vendor"
-    if vendor.exists():
-        shutil.copytree(vendor, opt_dir / "vendor", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-
     (debian / "control").write_text(
         textwrap.dedent(
             f"""\
@@ -65,9 +61,6 @@ def main() -> int:
             mkdir -p "$APP_HOME"
             cp /opt/LauncherEVA/LauncherEVA "$APP_HOME/LauncherEVA"
             chmod +x "$APP_HOME/LauncherEVA"
-            if [ -d /opt/LauncherEVA/vendor ] && [ ! -d "$APP_HOME/vendor" ]; then
-              cp -a /opt/LauncherEVA/vendor "$APP_HOME/vendor"
-            fi
             exec "$APP_HOME/LauncherEVA" "$@"
             """
         ),

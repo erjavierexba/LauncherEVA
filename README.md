@@ -26,7 +26,7 @@ http://localhost:8080
 
 ## Aplicación de escritorio
 
-El ejecutable de escritorio arranca EVA en segundo plano, abre el configurador en una ventana propia y deja publicada la web de jugadores en el puerto cliente.
+El ejecutable de escritorio arranca EVA en segundo plano, abre el configurador en una ventana propia y deja publicada la web de jugadores en el puerto cliente. No incluye Android SDK, JDK ni builder APK: la app de jugadores es una web servida en local/LAN.
 
 ```bash
 PYTHONPATH=src python3 -m launcher_eva.desktop

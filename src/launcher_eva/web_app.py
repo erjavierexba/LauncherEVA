@@ -107,17 +107,8 @@ def runtime_sqlite_path() -> Path:
     return app_root() / "eva.sqlite3"
 
 
-def runtime_apks_root() -> Path:
-    return app_root() / "apks"
-
-
-def runtime_vendor_root() -> Path:
-    return app_root() / "vendor"
-
-
 def ensure_runtime_layout() -> None:
     runtime_assets_root().mkdir(parents=True, exist_ok=True)
-    runtime_apks_root().mkdir(parents=True, exist_ok=True)
 
 
 def bundled_root() -> Path:
@@ -145,39 +136,6 @@ def seed_bundled_projects() -> None:
         destination = destination_root / filename
         if source.exists() and not destination.exists():
             shutil.copyfile(source, destination)
-
-
-def seed_bundled_vendor() -> None:
-    source = bundled_root() / "vendor"
-    destination = runtime_vendor_root()
-    if not getattr(sys, "frozen", False) or not source.exists() or destination.exists():
-        return
-    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
-        "__pycache__",
-        "*.pyc",
-    ))
-    ensure_vendor_executable_bits(destination)
-
-
-def ensure_vendor_executable_bits(vendor_root: Path) -> None:
-    if os.name == "nt" or not vendor_root.exists():
-        return
-    executable_dirs = [
-        vendor_root / "node" / "bin",
-        vendor_root / "jdk" / "bin",
-        vendor_root / "android-sdk" / "cmdline-tools" / "latest" / "bin",
-        vendor_root / "android-sdk" / "platform-tools",
-        vendor_root / "android-sdk" / "build-tools",
-    ]
-    for directory in executable_dirs:
-        if not directory.exists():
-            continue
-        for path in directory.rglob("*"):
-            if path.is_file():
-                try:
-                    path.chmod(path.stat().st_mode | 0o755)
-                except OSError:
-                    pass
 
 
 def default_settings() -> dict:
@@ -309,15 +267,12 @@ def microphone_devices() -> list[dict[str, str]]:
 class LauncherState:
     def __init__(self):
         seed_bundled_projects()
-        seed_bundled_vendor()
-        ensure_vendor_executable_bits(runtime_vendor_root())
         ensure_runtime_layout()
         self.settings_path = app_root() / CONFIG_FILE
         self.settings = default_settings()
         loaded = load_json(self.settings_path, {})
         if isinstance(loaded, dict):
             self.settings.update(loaded)
-        self.settings.pop("android_package", None)
         self.logs: list[str] = []
         self.events: queue.Queue[str] = queue.Queue()
         self.eva_process: subprocess.Popen | None = None
@@ -371,25 +326,6 @@ class LauncherState:
 
     def command_environment(self) -> dict[str, str]:
         env = os.environ.copy()
-        vendor_root = runtime_vendor_root()
-        path_parts = []
-        for candidate in [
-            vendor_root / "node" / "bin",
-            vendor_root / "jdk" / "bin",
-            vendor_root / "android-sdk" / "cmdline-tools" / "latest" / "bin",
-            vendor_root / "android-sdk" / "platform-tools",
-        ]:
-            if candidate.exists():
-                path_parts.append(str(candidate))
-        if path_parts:
-            env["PATH"] = os.pathsep.join([*path_parts, env.get("PATH", "")])
-        if (vendor_root / "jdk").exists():
-            env["JAVA_HOME"] = str(vendor_root / "jdk")
-        if (vendor_root / "android-sdk").exists():
-            env["ANDROID_HOME"] = str(vendor_root / "android-sdk")
-            env["ANDROID_SDK_ROOT"] = str(vendor_root / "android-sdk")
-            env["ANDROID_USER_HOME"] = str(app_root() / ".android")
-        env["GRADLE_USER_HOME"] = str(app_root() / ".gradle")
         env["EVA_DB_PATH"] = str(runtime_sqlite_path())
         env["EVA_MEDIA_ROOT"] = str(app_root() / "media")
         return env
@@ -437,15 +373,11 @@ class LauncherState:
             ".venv",
             ".venv-build",
             "__pycache__",
-            ".android",
-            ".gradle",
-            "apks",
             "dist",
             "build",
             ".idea",
             ".vscode",
             "managed_releases",
-            "vendor",
             VOSK_MODEL_DIR,
             VOSK_MODEL_ZIP,
         }
