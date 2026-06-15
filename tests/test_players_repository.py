@@ -181,6 +181,27 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(page["label"], "Portada")
         self.assertEqual([section["key"] for section in page["sections"]], ["identity", "combat"])
 
+    def test_template_label_update_keeps_existing_fields(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        result = templates.create_template("label_only", "Label only", {
+            "id": "label_only",
+            "name": "Label only",
+            "fields": [
+                {"key": "hp", "label": "PG", "type": "number", "default": 10},
+            ],
+            "pages": [],
+        })
+
+        self.assertTrue(result["ok"])
+        field_id = result["template"]["fields"][0]["id"]
+
+        updated = templates.update_template(result["template"]["id"], "Label updated", None)
+
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["template"]["label"], "Label updated")
+        self.assertEqual(updated["template"]["fields"][0]["id"], field_id)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -672,7 +672,7 @@ class CharacterTemplatesRepository:
             "fields": self.fields_for_template(row["id"]),
         }
 
-    def update_template(self, template_id: int, label: str, fields: list[dict], schema: dict | None = None):
+    def update_template(self, template_id: int, label: str, fields: list[dict] | None, schema: dict | None = None):
         template = self.get_template(template_id)
 
         if template is None:
@@ -686,6 +686,23 @@ class CharacterTemplatesRepository:
             return {
                 "ok": False,
                 "mensaje": "El nombre de la plantilla es obligatorio.",
+            }
+
+        if fields is None:
+            if schema is None:
+                self.conn.execute(
+                    "UPDATE character_templates SET label = ? WHERE id = ?",
+                    (label, template_id),
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE character_templates SET label = ?, schema_json = ? WHERE id = ?",
+                    (label, self._serialize_schema(schema), template_id),
+                )
+            self.conn.commit()
+            return {
+                "ok": True,
+                "template": self.get_template(template_id),
             }
 
         clean_fields = []

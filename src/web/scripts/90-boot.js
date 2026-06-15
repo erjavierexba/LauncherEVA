@@ -29,11 +29,20 @@
     document.getElementById("closeTemplateJsonButton").addEventListener("click", closeTemplateJsonModal);
     templateBuilderTabButton.addEventListener("click", () => setTemplateBuilderTab("builder"));
     templateJsonTabButton.addEventListener("click", () => setTemplateBuilderTab("json"));
-    document.getElementById("builderAddFieldButton").addEventListener("click", addBuilderField);
+    document.getElementById("builderAddFieldButton").addEventListener("click", () => addBuilderField("text"));
+    document.querySelectorAll("[data-builder-preset]").forEach((button) => {
+      button.addEventListener("click", () => addBuilderField(button.dataset.builderPreset || "text"));
+    });
     document.getElementById("builderAddConstantButton").addEventListener("click", addBuilderConstant);
     document.getElementById("builderAddPageButton").addEventListener("click", addBuilderPage);
-    templateJsonKeyInput.addEventListener("change", () => writeBuilderSchema(currentBuilderSchema()));
-    templateJsonLabelInput.addEventListener("change", () => writeBuilderSchema(currentBuilderSchema()));
+    templateJsonKeyInput.addEventListener("input", () => {
+      templateKeyEdited = true;
+      writeBuilderSchema(currentBuilderSchema());
+    });
+    templateJsonLabelInput.addEventListener("input", () => {
+      syncTemplateKeyFromLabel();
+      writeBuilderSchema(currentBuilderSchema());
+    });
     templateJsonTextarea.addEventListener("change", () => {
       try {
         renderTemplateBuilder(readTemplateJson());

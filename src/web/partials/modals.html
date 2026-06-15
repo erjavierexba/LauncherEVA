@@ -71,49 +71,64 @@
   <div id="templateJsonModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal schema-modal">
       <div class="modal-header">
-        <h2 id="templateJsonModalTitle">Plantilla JSON</h2>
+        <h2 id="templateJsonModalTitle">Builder de manual</h2>
         <button id="closeTemplateJsonButton" class="compact secondary">Cerrar</button>
       </div>
-      <div class="grid">
+      <div class="manual-meta-grid">
         <div>
-          <label>Clave técnica</label>
-          <input id="templateJsonKeyInput" placeholder="pathfinder_2e" />
-        </div>
-        <div>
-          <label>Nombre visible</label>
+          <label>Nombre del manual</label>
           <input id="templateJsonLabelInput" placeholder="Pathfinder 2e" />
         </div>
+        <details class="manual-advanced">
+          <summary>Avanzado</summary>
+          <label>Identificador interno</label>
+          <input id="templateJsonKeyInput" placeholder="pathfinder_2e" />
+        </details>
       </div>
       <div class="schema-tools">
-        <button id="templateBuilderTabButton" type="button">Constructor</button>
-        <button id="templateJsonTabButton" type="button" class="secondary">JSON</button>
+        <button id="templateBuilderTabButton" type="button">Builder visual</button>
+        <button id="templateJsonTabButton" type="button" class="secondary">JSON avanzado</button>
         <button id="validateTemplateJsonButton" type="button" class="secondary">Validar</button>
       </div>
       <div id="templateBuilderPanel" class="template-builder">
         <div class="template-builder-workbench">
+          <div class="builder-column builder-quick-column">
+            <div class="builder-header">
+              <h3>Componentes rápidos</h3>
+            </div>
+            <div class="builder-quick-actions">
+              <button type="button" class="secondary" data-builder-preset="text">Texto</button>
+              <button type="button" class="secondary" data-builder-preset="number">Número</button>
+              <button type="button" class="secondary" data-builder-preset="resource">Recurso</button>
+              <button type="button" class="secondary" data-builder-preset="roll">Tirada</button>
+              <button type="button" class="secondary" data-builder-preset="notes">Notas</button>
+              <button type="button" class="secondary" data-builder-preset="object">Objeto</button>
+              <button type="button" class="secondary" data-builder-preset="weapon">Arma</button>
+            </div>
+          </div>
           <div class="builder-column">
             <div class="builder-header">
-              <h3>Campos</h3>
+              <h3>Ficha</h3>
               <button id="builderAddFieldButton" type="button" class="compact secondary">Añadir</button>
             </div>
             <div id="builderFieldsList" class="builder-list"></div>
           </div>
-          <div class="builder-column">
+          <div class="builder-column builder-constants-column">
             <div class="builder-header">
-              <h3>Constantes</h3>
+              <h3>Reglas y tablas</h3>
               <button id="builderAddConstantButton" type="button" class="compact secondary">Añadir</button>
             </div>
             <div id="builderConstantsList" class="builder-list"></div>
           </div>
           <div class="builder-column builder-pages-column">
             <div class="builder-header">
-              <h3>Páginas y secciones</h3>
+              <h3>Páginas</h3>
               <button id="builderAddPageButton" type="button" class="compact secondary">Página</button>
             </div>
             <div id="builderPagesList" class="builder-list"></div>
           </div>
         </div>
-        <aside class="phone-preview" aria-label="Preview móvil">
+        <aside class="phone-preview" aria-label="Preview cliente">
           <div class="phone-frame">
             <div class="phone-speaker"></div>
             <div id="templatePhonePreview" class="phone-screen"></div>

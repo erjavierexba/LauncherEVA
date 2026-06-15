@@ -98,6 +98,10 @@
         max-height: none;
       }
 
+      .manual-meta-grid {
+        grid-template-columns: 1fr;
+      }
+
       .builder-pages-column {
         grid-column: auto;
       }

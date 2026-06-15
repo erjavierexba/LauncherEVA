@@ -66,7 +66,7 @@
     function createTemplateEmptyState(template) {
       const empty = document.createElement("div");
       empty.className = "template-empty-state";
-      empty.textContent = `${template.label || "Esta plantilla"} no tiene campos rápidos. Pulsa Diseñar para revisar el JSON o Añadir campo para crear uno.`;
+      empty.textContent = `${template.label || "Este manual"} no tiene ficha todavía.`;
       return empty;
     }
 
@@ -297,16 +297,16 @@
 
         const grid = document.createElement("div");
         grid.className = "builder-mini-grid";
-        const key = labeledInput("Clave", field.key || "");
-        const label = labeledInput("Etiqueta", field.label || "");
+        const key = labeledInput("ID", field.key || "");
+        const label = labeledInput("Nombre", field.label || "");
         const type = labeledSelect("Tipo", schemaFieldTypes(), field.type || "text");
         [...type.select.options].forEach((option) => {
           option.textContent = fieldTypeLabel(option.value);
         });
-        const defaultValue = labeledInput("Default", field.default ?? "");
+        const defaultValue = labeledInput("Valor inicial", field.default ?? "");
         const formula = labeledInput("Fórmula", field.formula || "");
         const display = labeledSelect("Vista", ["", "stepper", "counter", "list"], field.display || "");
-        const options = labeledInput("Opciones/constante", field.options || "");
+        const options = labeledInput("Opciones/tabla", field.options || "");
 
         const favorite = document.createElement("label");
         favorite.className = "switch-row";
@@ -429,13 +429,13 @@
       itemFields.forEach((itemField, itemIndex) => {
         const row = document.createElement("div");
         row.className = "builder-mini-grid";
-        const key = labeledInput("Clave", itemField.key || "");
-        const label = labeledInput("Etiqueta", itemField.label || "");
+        const key = labeledInput("ID", itemField.key || "");
+        const label = labeledInput("Nombre", itemField.label || "");
         const type = labeledSelect("Tipo", ["text", "long_text", "csv", "number", "roll", "formula"], itemField.type || "text");
         [...type.select.options].forEach((option) => {
           option.textContent = fieldTypeLabel(option.value);
         });
-        const defaultValue = labeledInput("Default", itemField.default ?? "");
+        const defaultValue = labeledInput("Valor inicial", itemField.default ?? "");
         const formula = labeledInput("Fórmula", itemField.formula || "");
         const remove = document.createElement("button");
         remove.type = "button";
@@ -493,8 +493,8 @@
         panel.className = "builder-panel compact-panel";
         const grid = document.createElement("div");
         grid.className = "builder-mini-grid";
-        const key = labeledInput("Ruta", path);
-        const val = labeledInput("Valor JSON", formatConstantValue(value));
+        const key = labeledInput("Nombre", path);
+        const val = labeledInput("Valor", formatConstantValue(value));
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "danger";
@@ -547,8 +547,8 @@
 
         const grid = document.createElement("div");
         grid.className = "builder-mini-grid";
-        const key = labeledInput("Clave", page.key || "");
-        const label = labeledInput("Etiqueta", page.label || "");
+        const key = labeledInput("ID", page.key || "");
+        const label = labeledInput("Nombre", page.label || "");
         addBuilderInputListener(key.input, (next, value) => {
           next.pages[pageIndex].key = templateKeyFromLabel(value || `pagina_${pageIndex + 1}`);
         });
@@ -588,8 +588,8 @@
 
       const grid = document.createElement("div");
       grid.className = "builder-mini-grid";
-      const key = labeledInput("Clave", section.key || "");
-      const label = labeledInput("Etiqueta", section.label || "");
+      const key = labeledInput("ID", section.key || "");
+      const label = labeledInput("Nombre", section.label || "");
       addBuilderInputListener(key.input, (schema, value) => {
         schema.pages[pageIndex].sections[sectionIndex].key = templateKeyFromLabel(value || `seccion_${sectionIndex + 1}`);
       });
@@ -638,21 +638,116 @@
       return button;
     }
 
-    function addBuilderField() {
+    function addBuilderField(preset = "text") {
       updateSchemaFromBuilder((schema) => {
-        const key = `campo_${schema.fields.length + 1}`;
-        schema.fields.push({
-          key,
-          label: `Campo ${schema.fields.length + 1}`,
+        const field = builderFieldPreset(preset, schema);
+        schema.fields.push(field);
+        appendFieldToFirstSection(schema, field.key);
+      });
+    }
+
+    function builderFieldPreset(preset, schema) {
+      const nextIndex = (schema.fields || []).length + 1;
+      const baseKey = uniqueSchemaFieldKey(schema, preset === "weapon" ? "armas" : preset === "object" ? "objetos" : `campo_${nextIndex}`);
+      const presets = {
+        text: {
+          key: baseKey,
+          label: `Texto ${nextIndex}`,
           type: "text",
           default: "",
           editable: true,
-        });
-        if (schema.pages[0]?.sections?.[0]) {
-          schema.pages[0].sections[0].fields = schema.pages[0].sections[0].fields || [];
-          schema.pages[0].sections[0].fields.push(key);
-        }
-      });
+        },
+        number: {
+          key: baseKey,
+          label: `Número ${nextIndex}`,
+          type: "number",
+          default: 0,
+          editable: true,
+          display: "stepper",
+        },
+        resource: {
+          key: uniqueSchemaFieldKey(schema, "recurso"),
+          label: "Recurso",
+          type: "number",
+          default: 0,
+          editable: true,
+          display: "counter",
+          favorite: true,
+        },
+        roll: {
+          key: uniqueSchemaFieldKey(schema, "tirada"),
+          label: "Tirada",
+          type: "roll",
+          formula: "1d20",
+          default: "",
+          editable: true,
+        },
+        notes: {
+          key: uniqueSchemaFieldKey(schema, "notas"),
+          label: "Notas",
+          type: "long_text",
+          default: "",
+          editable: true,
+        },
+        object: {
+          key: uniqueSchemaFieldKey(schema, "objetos"),
+          label: "Objetos",
+          type: "array",
+          display: "list",
+          editable: true,
+          itemTemplate: {
+            fields: [
+              { key: "name", label: "Nombre", type: "text", default: "" },
+              { key: "traits", label: "Traits", type: "csv", default: "" },
+              { key: "description", label: "Descripción", type: "long_text", default: "" },
+            ],
+          },
+        },
+        weapon: {
+          key: uniqueSchemaFieldKey(schema, "armas"),
+          label: "Armas",
+          type: "array",
+          display: "list",
+          editable: true,
+          itemTemplate: {
+            fields: [
+              { key: "name", label: "Nombre", type: "text", default: "" },
+              { key: "traits", label: "Traits", type: "csv", default: "" },
+              { key: "description", label: "Descripción", type: "long_text", default: "" },
+              { key: "attack", label: "Acierto", type: "formula", formula: "1d20", default: "" },
+              { key: "damage", label: "Daño", type: "formula", formula: "1d8", default: "" },
+            ],
+          },
+        },
+      };
+
+      return presets[preset] || presets.text;
+    }
+
+    function uniqueSchemaFieldKey(schema, baseKey) {
+      const clean = templateKeyFromLabel(baseKey || "campo");
+      const used = new Set((schema.fields || []).map((field) => field.key));
+      if (!used.has(clean)) return clean;
+      let index = 2;
+      while (used.has(`${clean}_${index}`)) index += 1;
+      return `${clean}_${index}`;
+    }
+
+    function appendFieldToFirstSection(schema, fieldKey) {
+      schema.pages = Array.isArray(schema.pages) ? schema.pages : [];
+      if (!schema.pages.length) {
+        schema.pages.push({ key: "main", label: "Principal", sections: [] });
+      }
+      const page = schema.pages[0];
+      page.sections = Array.isArray(page.sections) ? page.sections : [];
+      if (!page.sections.length) {
+        page.sections.push({ key: "principal", label: "Principal", fields: [] });
+      }
+      const section = page.sections[0];
+      section.fields = Array.isArray(section.fields) ? section.fields : [];
+      if (!section.fields.includes(fieldKey)) {
+        section.fields.push(fieldKey);
+      }
     }
 
     function addBuilderConstant() {
@@ -800,7 +895,7 @@
       templatePreviewPageIndex = Math.max(0, Math.min(pageIndex, Math.max(0, pages.length - 1)));
       const title = document.createElement("div");
       title.className = "preview-template-title";
-      title.textContent = templateJsonLabelInput.value || schema.name || "Nueva plantilla";
+      title.textContent = templateJsonLabelInput.value || schema.name || "Nuevo manual";
       templatePhonePreview.appendChild(title);
 
       const tabs = document.createElement("div");
@@ -842,36 +937,159 @@
         for (const fieldKey of section.fields || []) {
           const field = fieldsByKey.get(fieldKey);
           if (!field) continue;
-          const row = document.createElement("div");
-          row.className = "preview-field";
-          const label = document.createElement("div");
-          label.className = "preview-field-label";
-          label.textContent = field.label || field.key;
-          const value = document.createElement("div");
-          value.className = "preview-field-value";
-          value.textContent = previewFieldValue(field);
-          row.append(label, value);
-          sectionNode.appendChild(row);
+          sectionNode.appendChild(createPreviewField(field));
         }
 
         templatePhonePreview.appendChild(sectionNode);
       }
     }
 
-    function previewFieldValue(field) {
+    function createPreviewField(field) {
+      const row = document.createElement("div");
+      row.className = "preview-field";
+      if (field.type === "array" || field.type === "long_text") {
+        row.classList.add("preview-wide");
+      }
+      const label = document.createElement("div");
+      label.className = "preview-field-label";
+      label.textContent = field.label || field.key;
+      const value = document.createElement("div");
+      value.className = "preview-field-value";
+      value.appendChild(createPreviewControl(field));
+      row.append(label, value);
+      return row;
+    }
+
+    function createPreviewControl(field) {
       if (field.type === "array") {
-        return `Objetos (${field.itemTemplate?.fields?.length || field.config?.itemFields?.length || 0} campos)`;
+        return createPreviewObject(field);
       }
+
       if (field.type === "roll") {
-        return field.formula || "1d20";
+        const button = document.createElement("span");
+        button.className = "preview-roll-button";
+        button.textContent = field.formula || "1d20";
+        return button;
       }
+
+      if (field.type === "formula") {
+        const button = document.createElement("span");
+        button.className = "preview-roll-button";
+        button.textContent = field.formula || "Lanzar";
+        return button;
+      }
+
       if (field.type === "cycle") {
-        return field.default || field.options || "Opción";
+        const pill = document.createElement("span");
+        pill.className = "preview-pill";
+        pill.textContent = field.default || field.options || "Opción";
+        return pill;
       }
+
+      if (field.type === "long_text") {
+        const block = document.createElement("div");
+        block.className = "preview-textarea";
+        block.textContent = field.default || "Notas...";
+        return block;
+      }
+
+      if (field.type === "csv") {
+        return createPreviewTraits(field.default || "rasgo, etiqueta");
+      }
+
+      if (field.type === "number") {
+        if (field.display === "counter" || field.display === "stepper") {
+          const stepper = document.createElement("span");
+          stepper.className = "preview-stepper";
+          const minus = document.createElement("span");
+          minus.className = "preview-step-button";
+          minus.textContent = "-";
+          const amount = document.createElement("span");
+          amount.className = "preview-step-value";
+          amount.textContent = String(field.default ?? 0);
+          const plus = document.createElement("span");
+          plus.className = "preview-step-button";
+          plus.textContent = "+";
+          stepper.append(minus, amount, plus);
+          return stepper;
+        }
+
+        const pill = document.createElement("span");
+        pill.className = "preview-pill";
+        pill.textContent = String(field.default ?? 0);
+        return pill;
+      }
+
       if (field.formula) {
-        return "=";
+        const button = document.createElement("span");
+        button.className = "preview-roll-button";
+        button.textContent = field.formula;
+        return button;
       }
-      return field.default ?? "—";
+
+      const input = document.createElement("span");
+      input.className = "preview-input";
+      input.textContent = field.default || "Texto";
+      return input;
+    }
+
+    function createPreviewObject(field) {
+      const itemFields = field.itemTemplate?.fields || field.config?.itemFields || [];
+      const card = document.createElement("div");
+      card.className = "preview-object";
+      const title = document.createElement("div");
+      title.className = "preview-object-title";
+      title.textContent = previewObjectTitle(itemFields);
+      card.appendChild(title);
+
+      const traits = itemFields.find((itemField) => itemField.type === "csv");
+      if (traits) {
+        card.appendChild(createPreviewTraits(traits.default || traits.defaultValue || "ligera, versátil"));
+      }
+
+      const description = itemFields.find((itemField) => itemField.type === "long_text" || /desc|descripcion|description/i.test(itemField.key || itemField.label || ""));
+      if (description) {
+        const text = document.createElement("div");
+        text.className = "preview-object-description";
+        text.textContent = description.default || description.defaultValue || "Descripción del objeto.";
+        card.appendChild(text);
+      }
+
+      const rolls = itemFields.filter((itemField) => itemField.type === "formula" || itemField.type === "roll" || itemField.type === "throw" || itemField.formula);
+      if (rolls.length) {
+        const rollList = document.createElement("div");
+        rollList.className = "preview-object-rolls";
+        rolls.forEach((itemField) => {
+          const roll = document.createElement("span");
+          roll.className = "preview-roll-button";
+          roll.textContent = itemField.label || itemField.formula || "Tirada";
+          rollList.appendChild(roll);
+        });
+        card.appendChild(rollList);
+      }
+
+      return card;
+    }
+
+    function previewObjectTitle(itemFields) {
+      const nameField = itemFields.find((itemField) => ["name", "nombre", "title", "titulo"].includes(itemField.key));
+      return nameField?.default || nameField?.defaultValue || nameField?.label || "Objeto";
+    }
+
+    function createPreviewTraits(raw) {
+      const list = document.createElement("div");
+      list.className = "preview-traits";
+      String(raw || "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => {
+          const chip = document.createElement("span");
+          chip.className = "preview-trait";
+          chip.textContent = part;
+          list.appendChild(chip);
+        });
+      return list;
     }
 
     function readTemplateFieldsEditor() {
@@ -1135,27 +1353,28 @@
       const template = selectedTemplate();
       templateJsonMode = mode;
       templateJsonSourceId = template?.id || null;
+      templateKeyEdited = false;
       templateJsonKeyInput.disabled = mode === "edit";
       templateJsonStatus.textContent = "";
       templateJsonStatus.className = "schema-status";
 
       if (mode === "create") {
-        const label = "Nueva plantilla";
+        const label = "Nuevo manual";
         const key = templateKeyFromLabel(label);
-        templateJsonModalTitle.textContent = "Crear plantilla";
+        templateJsonModalTitle.textContent = "Crear manual";
         templateJsonKeyInput.value = key;
         templateJsonLabelInput.value = label;
         templateJsonTextarea.value = formatJson(defaultSystemSchema(key, label));
       } else if (mode === "duplicate" && template) {
         const label = `${template.label} copia`;
         const key = templateKeyFromLabel(`${template.key || template.label}_copia`);
-        templateJsonModalTitle.textContent = "Duplicar plantilla";
+        templateJsonModalTitle.textContent = "Duplicar manual";
         templateJsonKeyInput.value = key;
         templateJsonLabelInput.value = label;
         templateJsonTextarea.value = formatJson(template.schema || defaultSystemSchema(key, label));
       } else if (template) {
         const key = template.key || templateKeyFromLabel(template.label);
-        templateJsonModalTitle.textContent = "Editar plantilla";
+        templateJsonModalTitle.textContent = "Editar manual";
         templateJsonKeyInput.value = key;
         templateJsonLabelInput.value = templateLabelInput.value || template.label;
         templateJsonTextarea.value = formatJson(template.schema || schemaFromTemplateFields(key, template.label, template.fields || []));
@@ -1168,6 +1387,14 @@
       setTemplateBuilderTab("builder");
       writeBuilderSchema(currentBuilderSchema());
       templateJsonLabelInput.focus();
+    }
+
+    function syncTemplateKeyFromLabel() {
+      if (templateJsonMode === "edit" || templateKeyEdited) {
+        return;
+      }
+
+      templateJsonKeyInput.value = templateKeyFromLabel(templateJsonLabelInput.value || "manual");
     }
 
     function closeTemplateJsonModal() {
@@ -1214,9 +1441,10 @@
     }
 
     async function saveTemplateJson() {
+      syncTemplateKeyFromLabel();
       const schema = readTemplateJson();
-      const key = templateJsonKeyInput.value;
-      const label = templateJsonLabelInput.value;
+      const label = templateJsonLabelInput.value || schema.name || "Manual";
+      const key = templateJsonKeyInput.value || templateKeyFromLabel(label);
       const fields = compatibilityFieldsFromSchema(schema);
       let data;
 
@@ -1258,12 +1486,12 @@
       await loadTemplates(data.template?.id || templateJsonSourceId);
       await loadStatus();
 
-      return { ok: true, mensaje: "Plantilla JSON guardada." };
+      return { ok: true, mensaje: "Manual guardado." };
     }
 
     async function createTemplate() {
       openTemplateJsonModal("create");
-      return { ok: true, mensaje: "Editor de plantilla abierto." };
+      return { ok: true, mensaje: "Builder de manual abierto." };
     }
 
     async function duplicateTemplate() {
@@ -1275,7 +1503,7 @@
     async function editTemplateJson() {
       if (!selectedTemplate()) return { ok: false, mensaje: "No hay plantilla seleccionada." };
       openTemplateJsonModal("edit");
-      return { ok: true, mensaje: "Editor JSON abierto." };
+      return { ok: true, mensaje: "Builder de manual abierto." };
     }
 
     async function saveTemplate() {
@@ -1287,8 +1515,6 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: templateLabelInput.value,
-          fields: readTemplateFieldsEditor(),
-          schema: template.schema || {},
         }),
       });
       const data = await response.json();

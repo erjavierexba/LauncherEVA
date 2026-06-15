@@ -28,6 +28,7 @@
     let templateJsonSourceId = null;
     let templateBuilderTab = "builder";
     let templatePreviewPageIndex = 0;
+    let templateKeyEdited = false;
 
     const checksNpcSwitch = document.getElementById("checksNpcSwitch");
     const viewTabs = [...document.querySelectorAll("[data-panel-filter]")];

@@ -37,6 +37,32 @@
       gap: 8px;
     }
 
+    .manual-meta-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(180px, 0.45fr);
+      gap: 10px;
+      align-items: end;
+    }
+
+    .manual-advanced {
+      min-height: 36px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--page);
+    }
+
+    .manual-advanced summary {
+      color: var(--soft);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .manual-advanced label {
+      margin-top: 8px;
+    }
+
     .template-builder {
       min-height: 0;
       display: grid;
@@ -48,7 +74,7 @@
     .template-builder-workbench {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.8fr);
+      grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.72fr);
       gap: 10px;
       align-items: start;
       max-height: min(62vh, 610px);
@@ -65,6 +91,21 @@
 
     .builder-pages-column {
       grid-column: 1 / -1;
+    }
+
+    .builder-quick-column {
+      grid-column: 1 / -1;
+    }
+
+    .builder-quick-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      gap: 8px;
+    }
+
+    .builder-quick-actions button {
+      justify-content: center;
+      min-height: 38px;
     }
 
     .builder-header {
@@ -276,7 +317,7 @@
 
     .preview-field {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(68px, auto);
+      grid-template-columns: minmax(0, 1fr) minmax(84px, auto);
       gap: 8px;
       align-items: center;
       padding: 7px 0;
@@ -286,6 +327,10 @@
 
     .preview-field:first-of-type {
       border-top: 0;
+    }
+
+    .preview-field.preview-wide {
+      grid-template-columns: 1fr;
     }
 
     .preview-field-label {
@@ -303,6 +348,131 @@
       font-weight: 900;
       text-align: right;
       overflow-wrap: anywhere;
+    }
+
+    .preview-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+      min-height: 30px;
+    }
+
+    .preview-input {
+      min-width: 72px;
+      max-width: 122px;
+      padding: 6px 8px;
+      border: 1px solid #404753;
+      border-radius: 6px;
+      background: #0b0f14;
+      color: var(--soft);
+      font-size: 11px;
+      font-weight: 800;
+      text-align: left;
+    }
+
+    .preview-textarea {
+      grid-column: 1 / -1;
+      min-height: 58px;
+      padding: 8px;
+      border: 1px solid #404753;
+      border-radius: 6px;
+      background: #0b0f14;
+      color: var(--soft);
+      font-size: 11px;
+      line-height: 1.35;
+      text-align: left;
+    }
+
+    .preview-pill,
+    .preview-roll-button,
+    .preview-step-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 5px 8px;
+      border: 1px solid #404753;
+      border-radius: 999px;
+      background: #20242b;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .preview-roll-button {
+      color: #111419;
+      background: var(--gold);
+      border-color: var(--gold);
+    }
+
+    .preview-stepper {
+      display: inline-grid;
+      grid-template-columns: 28px minmax(34px, auto) 28px;
+      align-items: center;
+      border: 1px solid #404753;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #0b0f14;
+    }
+
+    .preview-step-button {
+      min-height: 28px;
+      border: 0;
+      border-radius: 0;
+      background: #20242b;
+    }
+
+    .preview-step-value {
+      padding: 4px 8px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .preview-traits {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    .preview-trait {
+      padding: 3px 7px;
+      border: 1px solid rgba(201, 162, 74, 0.38);
+      border-radius: 999px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .preview-object {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 7px;
+      padding: 8px;
+      border: 1px solid #404753;
+      border-radius: 6px;
+      background: #0b0f14;
+    }
+
+    .preview-object-title {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .preview-object-description {
+      color: var(--soft);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .preview-object-rolls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
     }
 
     #templateJsonTextarea {

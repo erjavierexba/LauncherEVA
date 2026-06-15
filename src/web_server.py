@@ -825,8 +825,8 @@ async def api_templates_update(request):
         }, status=400)
 
     fields = body.get("fields")
-    if not isinstance(fields, list):
-        fields = []
+    if fields is not None and not isinstance(fields, list):
+        fields = None
 
     result = context.db.character_templates.update_template(
         template_id,

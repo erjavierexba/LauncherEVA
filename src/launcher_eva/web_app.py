@@ -497,7 +497,7 @@ class LauncherState:
         self.log(f"[EVA] Modelo Vosk instalado en {model_dir}.")
 
     def ensure_horus_dependencies(self) -> None:
-        self.log("[Cliente] La web móvil ahora forma parte de EVA; no hay dependencias Node separadas.")
+        self.log("[Jugadores] La web de jugadores forma parte de EVA; no hay dependencias Node separadas.")
 
     def prepare_public_release_workflow(self) -> None:
         self.log("Preparando workflow completo de public release.")

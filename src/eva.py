@@ -261,7 +261,7 @@ async def ejecutar_info_comando(info, context):
             print("RESULTADO COMANDO:")
             print(json.dumps(resultado, ensure_ascii=False, indent=2))
 
-            # Solo mandamos al WS acciones que interesan a móviles.
+            # Solo mandamos al WS acciones que interesan a jugadores.
             if resultado.get("tipo") not in ("ERROR", "MUSICA", "MUSICA_CONTROL"):
                 await context.ws_queue.put(resultado)
             comando_activo = None

@@ -100,6 +100,6 @@ async def start_horus_server(context):
     site = web.TCPSite(runner, context.web_host, context.horus_port)
     await site.start()
 
-    print(f"[CLIENTE] Web móvil en http://localhost:{context.horus_port}")
+    print(f"[CLIENTE] Web de jugadores en http://localhost:{context.horus_port}")
 
     await asyncio.Event().wait()

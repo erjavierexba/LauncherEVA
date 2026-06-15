@@ -16,29 +16,29 @@
         </div>
       </section>
 
-      <section class="internal-template-tools" hidden aria-hidden="true">
-        <h2>Plantillas</h2>
+      <section data-panel="templates" data-panel-title="Manuales" data-panel-group="admin">
+        <h2>Manuales</h2>
         <div class="command-body">
           <div class="grid">
             <div>
-              <label>Plantilla</label>
+              <label>Manual</label>
               <select id="templateSelect"></select>
             </div>
             <div>
-              <label>Nombre</label>
+              <label>Nombre visible</label>
               <input id="templateLabelInput" placeholder="Pathfinder 2e" />
             </div>
           </div>
-          <div id="templateFieldsEditor" class="field-editor-list"></div>
-          <div class="row">
+          <div id="templateFieldsEditor" class="field-editor-list" hidden></div>
+          <div class="row" hidden>
             <button id="addTemplateFieldButton" class="secondary">Añadir campo</button>
-            <button id="activateTemplateButton" class="secondary">Activar</button>
           </div>
           <div class="command-actions">
-            <button id="createTemplateButton" class="secondary">Nueva</button>
+            <button id="createTemplateButton" class="secondary">Nuevo manual</button>
             <button id="duplicateTemplateButton" class="secondary">Duplicar</button>
-            <button id="editTemplateJsonButton" class="secondary">Diseñar</button>
-            <button id="saveTemplateButton">Guardar</button>
+            <button id="editTemplateJsonButton" class="secondary">Abrir builder</button>
+            <button id="activateTemplateButton" class="secondary">Activar</button>
+            <button id="saveTemplateButton">Guardar nombre</button>
             <button id="deleteTemplateButton" class="danger">Eliminar</button>
           </div>
         </div>
