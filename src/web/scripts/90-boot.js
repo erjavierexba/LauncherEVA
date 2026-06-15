@@ -1,8 +1,3 @@
-    numeroSelect.addEventListener("change", () => {
-      const esJoker = numeroSelect.value === "joker" || numeroSelect.value === "joker dorado";
-      paloSelect.disabled = esJoker;
-    });
-    document.getElementById("assignButton").addEventListener("click", () => runAction(assignCard));
     document.getElementById("mediaButton").addEventListener("click", () => runAction(sendMedia));
     document.getElementById("mediaPreviewButton").addEventListener("click", previewSelectedMedia);
     document.getElementById("clearMediaCacheButton").addEventListener("click", clearMediaCache);
@@ -51,7 +46,7 @@
     document.getElementById("templateJsonToFieldsButton").addEventListener("click", syncTemplateFieldsFromJson);
     document.getElementById("validateTemplateJsonButton").addEventListener("click", validateTemplateJson);
     document.getElementById("saveTemplateJsonButton").addEventListener("click", () => runAction(saveTemplateJson));
-    document.getElementById("refreshButton").addEventListener("click", loadCardsStatus);
+    document.getElementById("refreshButton").addEventListener("click", loadStatus);
     document.getElementById("copyClientAddressButton")?.addEventListener("click", async (event) => {
       const text = event.currentTarget.dataset.copyText || "";
       try {
@@ -81,38 +76,15 @@
     document.getElementById("initiativeAddButton").addEventListener("click", addInitiativeCombatant);
     document.getElementById("initiativeNextButton").addEventListener("click", nextInitiativeTurn);
     document.getElementById("initiativeClearButton").addEventListener("click", clearInitiative);
-    document.getElementById("doorEvaluateButton").addEventListener("click", () => runAction(evaluateDoor));
-    document.getElementById("doorCancelButton").addEventListener("click", () => runAction(cancelDoor));
-    document.getElementById("openExchangeButton").addEventListener("click", openExchangeModal);
-    document.getElementById("closeExchangeButton").addEventListener("click", closeExchangeModal);
-    document.getElementById("startExchangeButton").addEventListener("click", () => runAction(startExchange));
-    document.getElementById("cancelExchangeButton").addEventListener("click", () => runAction(cancelExchange));
     submitOnEnter(npcNameInput.closest("section"), () => runAction(createNpc));
-    submitOnEnter(numeroSelect.closest("section"), () => runAction(assignCard));
     submitOnEnter(mediaTargetSelect.closest("section"), () => runAction(sendMedia));
     submitOnEnter(countdownTargetSelect.closest("section"), () => runAction(startCountdown));
     submitOnEnter(killPlayerSelect.closest("section"), () => runAction(eliminatePlayer));
     submitOnEnter(nameCategorySelect.closest("section"), () => runAction(generateNamesAction));
-    submitOnEnter(doorCombinationSelect.closest("section"), () => runAction(evaluateDoor));
     submitOnEnter(initiativeNameInput.closest("section"), addInitiativeCombatant);
     viewTabs.forEach((tab) => {
       tab.addEventListener("click", () => setPanelView(tab.dataset.panelFilter));
     });
-    [
-      doorCombinationSelect,
-      doorLengthInput,
-      doorAtLeastCountInput,
-      doorAtLeastKindSelect,
-      doorSuitModeSelect,
-      doorSuitSelect,
-      doorRankFilterSelect,
-      doorColorSelect,
-      doorParitySelect,
-    ].forEach((control) => {
-      control.addEventListener("input", renderDoorSummary);
-      control.addEventListener("change", renderDoorSummary);
-    });
-
     function connectEvents() {
       const ws = new WebSocket(window.EVA_WS_URL);
 
@@ -133,36 +105,6 @@
             setStatus(data.mensaje || `Archivo guardado: ${data.valor?.nombre || "archivo"}.`);
           }
 
-          if (data.tipo === "DOOR_CHALLENGE" && data.valor) {
-            renderDoorChallenge(data.valor);
-            if (data.valor.status === "pending_validation") {
-              setStatus("La mesa propone una puerta. Espera tu validación.");
-            } else if (data.valor.status === "approved") {
-              setStatus("Puerta validada.");
-            } else if (data.valor.status === "rejected") {
-              setStatus("Puerta rechazada.");
-            }
-          }
-
-          if (data.tipo === "DOOR_CANCEL") {
-            for (const challenge of data.valor?.challenges || []) {
-              renderDoorChallenge(challenge);
-            }
-            setStatus("Puerta cancelada.");
-          }
-
-          if ((data.tipo === "EXCHANGE_OPEN" || data.tipo === "EXCHANGE_CLOSED") && data.valor) {
-            renderExchange(data.valor);
-            if (data.tipo === "EXCHANGE_OPEN") {
-              setStatus("Puesto de intercambio activo.");
-            } else if (data.valor.status === "completed") {
-              setStatus("Intercambio completado.");
-              loadCardsStatus();
-            } else {
-              setStatus("Puesto de intercambio cerrado.");
-            }
-          }
-
           if (data.tipo === "DICE_ROLL") {
             setStatus(data.mensaje || "Tirada registrada.");
           }
@@ -171,13 +113,13 @@
             setStatus(data.mensaje || "Plantilla actualizada.");
             applyTemplateUpdateEvent(data);
             loadTemplates(data.valor?.template?.id || null);
-            loadCardsStatus();
+            loadStatus();
           }
 
           if (data.tipo === "CHARACTER_SHEET_UPDATE") {
             setStatus(data.mensaje || "Ficha actualizada.");
             applyCharacterSheetUpdateEvent(data);
-            loadCardsStatus();
+            loadStatus();
           }
         } catch (error) {
           console.warn("Evento websocket inválido", error);
@@ -195,15 +137,14 @@
     }
 
     loadPanelVisibility();
-    renderDoorSummary();
     loadInitiativeState();
     readMediaCache();
     loadTemplates();
-    loadCardsStatus();
+    loadStatus();
     loadMediaCatalog();
     loadNameGeneratorOptions();
     loadMusicStatus();
     connectEvents();
-    setInterval(loadCardsStatus, 5000);
+    setInterval(loadStatus, 5000);
     setInterval(loadMediaCatalog, 10000);
     setInterval(loadMusicStatus, 2000);

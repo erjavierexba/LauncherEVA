@@ -166,10 +166,6 @@ body {
       overflow: visible;
     }
 
-    section[data-panel-group="cards"] {
-      border-top-color: var(--accent);
-    }
-
     section[data-panel-group="scene"] {
       border-top-color: var(--gold);
     }

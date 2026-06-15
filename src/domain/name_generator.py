@@ -434,7 +434,7 @@ CITY_SUFFIXES = [
 
 CITY_TITLES = [
     "Puerto de", "Torre de", "Villa", "Bastion de", "Fortaleza de",
-    "Puerta de", "Valle de", "Guardia de",
+    "Valle de", "Guardia de",
 ]
 
 CITY_THEMES = [

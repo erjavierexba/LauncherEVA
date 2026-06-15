@@ -3,12 +3,9 @@ const MEDIA_SESSION_KEY = "horus.mediaSessionId";
 const MEDIA_STORAGE_KEY = "horus.mediaItems";
 
 let username = localStorage.getItem(USER_STORAGE_KEY) || "";
-let cards = [];
 let sheet = null;
 let characters = [];
 let mediaItems = [];
-let activeDoorChallenges = [];
-let activeExchange = null;
 let countdownTimer = null;
 let deferredInstallPrompt = null;
 let serviceWorkerRegistration = null;
@@ -20,13 +17,9 @@ const usernameInput = document.getElementById("usernameInput");
 const loginStatus = document.getElementById("loginStatus");
 const playerName = document.getElementById("playerName");
 const statusLine = document.getElementById("statusLine");
-const cardsList = document.getElementById("cardsList");
-const cardCount = document.getElementById("cardCount");
 const sheetList = document.getElementById("sheetList");
 const mediaList = document.getElementById("mediaList");
 const countdownPanel = document.getElementById("countdownPanel");
-const doorPanel = document.getElementById("doorPanel");
-const exchangePanel = document.getElementById("exchangePanel");
 const mediaDialog = document.getElementById("mediaDialog");
 const mediaTitle = document.getElementById("mediaTitle");
 const mediaBody = document.getElementById("mediaBody");
@@ -111,11 +104,8 @@ async function refreshState() {
   }
 
   const data = await api(`/load/${encodeURIComponent(username)}`);
-  cards = data.cards || data.data || [];
   sheet = data.sheet || null;
   characters = data.characters || [];
-  activeDoorChallenges = data.activeDoorChallenges || [];
-  activeExchange = data.activeExchange || null;
   renderAll();
   setStatus("Sincronizado con EVA.");
 }
@@ -135,63 +125,8 @@ async function getServiceWorkerRegistration() {
 }
 
 function renderAll() {
-  renderCards();
   renderSheet();
-  renderDoors();
-  renderExchange();
   renderMedia();
-}
-
-function renderCards() {
-  cardsList.innerHTML = "";
-  cardCount.textContent = String(cards.length);
-
-  if (!cards.length) {
-    cardsList.appendChild(empty("No tienes cartas."));
-    return;
-  }
-
-  for (const card of cards) {
-    cardsList.appendChild(createCardToken(card));
-  }
-}
-
-function createCardToken(rawCard) {
-  const visual = getCardVisual(String(rawCard));
-  const token = document.createElement("div");
-  token.className = "card-token";
-
-  const circle = document.createElement("div");
-  circle.className = `card-circle ${visual.colorClass}`;
-  circle.textContent = visual.value;
-
-  const label = document.createElement("div");
-  label.className = "card-label";
-  label.textContent = `${visual.suit ? `${visual.suit} ` : ""}${visual.label}`;
-
-  token.append(circle, label);
-  return token;
-}
-
-function getCardVisual(rawCard) {
-  const card = rawCard.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-
-  if (card === "joker dorado") return { value: "J", suit: "*", label: "Joker dorado", colorClass: "gold" };
-  if (card === "joker") return { value: "J", suit: "", label: "Joker", colorClass: "gold" };
-
-  const match = card.match(/^(.+?) de (picas|corazones|diamantes|treboles)$/);
-  if (!match) return { value: "?", suit: "", label: rawCard, colorClass: "" };
-
-  const labels = { as: "A", jota: "J", reina: "Q", rey: "K" };
-  const suits = { picas: "P", corazones: "C", diamantes: "D", treboles: "T" };
-  const red = match[2] === "corazones" || match[2] === "diamantes";
-
-  return {
-    value: labels[match[1]] || match[1],
-    suit: suits[match[2]],
-    label: rawCard,
-    colorClass: red ? "red" : "",
-  };
 }
 
 function renderSheet() {
@@ -265,129 +200,6 @@ async function saveSheet() {
   }
 
   setStatus("Ficha guardada.");
-  await refreshState();
-}
-
-function renderDoors() {
-  doorPanel.innerHTML = "";
-  const challenge = activeDoorChallenges.find((item) => ["active", "pending_validation"].includes(item.status));
-
-  if (!challenge) {
-    doorPanel.hidden = true;
-    return;
-  }
-
-  doorPanel.hidden = false;
-  const title = document.createElement("div");
-  title.className = "panel-title";
-  title.textContent = challenge.status === "pending_validation" ? "Puerta enviada a EVA" : "Puerta activa";
-  const requirement = document.createElement("div");
-  requirement.textContent = challenge.requirement || "Combinación pendiente";
-  doorPanel.append(title, requirement);
-
-  for (const slot of challenge.slots || []) {
-    const row = document.createElement("div");
-    row.className = "door-slot";
-
-    const index = document.createElement("div");
-    index.className = "slot-index";
-    index.textContent = String(slot.index + 1);
-
-    const select = document.createElement("select");
-    select.disabled = Boolean(slot.owner && slot.owner !== username) || challenge.status === "pending_validation";
-    select.appendChild(new Option(slot.card && slot.owner ? `${slot.owner}: ${slot.card}` : "Hueco libre", ""));
-    for (const card of cards) {
-      select.appendChild(new Option(card, card));
-    }
-    if (slot.owner === username && slot.card) {
-      select.value = slot.card;
-    }
-
-    const action = document.createElement("button");
-    action.className = "secondary";
-    action.type = "button";
-    action.textContent = slot.owner === username && slot.card ? "Quitar" : "Poner";
-    action.disabled = select.disabled && !(slot.owner === username && slot.card);
-    action.addEventListener("click", () => updateDoorSlot(challenge, slot, select.value));
-
-    row.append(index, select, action);
-    doorPanel.appendChild(row);
-  }
-}
-
-async function updateDoorSlot(challenge, slot, card) {
-  if (slot.owner === username && slot.card) {
-    await api(`/api/doors/challenges/${encodeURIComponent(challenge.id)}/slots`, {
-      method: "DELETE",
-      body: JSON.stringify({ username, slotIndex: slot.index }),
-    });
-  } else {
-    await api(`/api/doors/challenges/${encodeURIComponent(challenge.id)}/slots`, {
-      method: "POST",
-      body: JSON.stringify({ username, slotIndex: slot.index, card }),
-    });
-  }
-  await refreshState();
-}
-
-function renderExchange() {
-  exchangePanel.innerHTML = "";
-
-  if (!activeExchange || activeExchange.status !== "active" || !activeExchange.playerParticipants?.includes(username)) {
-    exchangePanel.hidden = true;
-    return;
-  }
-
-  exchangePanel.hidden = false;
-  const title = document.createElement("div");
-  title.className = "panel-title";
-  title.textContent = "Intercambio activo";
-
-  const row = document.createElement("div");
-  row.className = "exchange-row";
-
-  const cardSelect = document.createElement("select");
-  for (const card of cards) {
-    cardSelect.appendChild(new Option(card, card));
-  }
-
-  const recipientSelect = document.createElement("select");
-  for (const player of activeExchange.participants || []) {
-    if (player !== username) {
-      recipientSelect.appendChild(new Option(player, player));
-    }
-  }
-
-  const send = document.createElement("button");
-  send.type = "button";
-  send.textContent = "Enviar";
-  send.addEventListener("click", () => sendExchangeCard(activeExchange, cardSelect.value, recipientSelect.value));
-
-  const decline = document.createElement("button");
-  decline.className = "secondary";
-  decline.type = "button";
-  decline.textContent = "Pasar";
-  decline.addEventListener("click", () => declineExchange(activeExchange));
-
-  row.append(cardSelect, recipientSelect, send);
-  exchangePanel.append(title, row, decline);
-}
-
-async function sendExchangeCard(exchange, card, recipient) {
-  await api(`/api/exchanges/${encodeURIComponent(exchange.id)}/transfer`, {
-    method: "POST",
-    body: JSON.stringify({ username, card, recipient }),
-  });
-  setStatus("Carta enviada.");
-  await refreshState();
-}
-
-async function declineExchange(exchange) {
-  await api(`/api/exchanges/${encodeURIComponent(exchange.id)}/decline`, {
-    method: "POST",
-    body: JSON.stringify({ username }),
-  });
-  setStatus("Has pasado el intercambio.");
   await refreshState();
 }
 
@@ -629,20 +441,13 @@ async function handleEvent(event) {
     return;
   }
 
-  if (event.tipo === "CARTA") {
-    setStatus(`Nueva carta: ${event.valor}.`);
-    await refreshState();
-  } else if (event.tipo === "MUESTRA") {
+  if (event.tipo === "MUESTRA") {
     cacheMedia(event.valor);
     setStatus(`Archivo recibido: ${event.valor?.nombre || "archivo"}.`);
   } else if (event.tipo === "COUNTDOWN") {
     startCountdown(event.valor || {});
   } else if (event.tipo === "COUNTDOWN_CANCEL") {
     cancelCountdown();
-  } else if (event.tipo === "DOOR_CHALLENGE" || event.tipo === "DOOR_CANCEL") {
-    await refreshState();
-  } else if (event.tipo === "EXCHANGE_OPEN" || event.tipo === "EXCHANGE_CLOSED") {
-    await refreshState();
   } else if (event.tipo === "DICE_ROLL") {
     setStatus(event.mensaje || "Tirada registrada.");
   } else if (event.tipo === "TEMPLATE_UPDATE" || event.tipo === "CHARACTER_SHEET_UPDATE") {

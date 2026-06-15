@@ -24,7 +24,6 @@
     let activeCharacterDetailName = null;
     let activeCharacterDetailId = null;
     let pendingDeleteCharacter = null;
-    let activeExchange = null;
     let templateJsonMode = "edit";
     let templateJsonSourceId = null;
     let templateBuilderTab = "builder";
@@ -35,10 +34,6 @@
     const panelSections = [...document.querySelectorAll("[data-panel]")];
     const settingsModal = document.getElementById("settingsModal");
     const panelOptions = document.getElementById("panelOptions");
-    const exchangeModal = document.getElementById("exchangeModal");
-    const exchangeParticipants = document.getElementById("exchangeParticipants");
-    const exchangeStatus = document.getElementById("exchangeStatus");
-    const exchangeResults = document.getElementById("exchangeResults");
     const templateSelect = document.getElementById("templateSelect");
     const templateLabelInput = document.getElementById("templateLabelInput");
     const templateFieldsEditor = document.getElementById("templateFieldsEditor");
@@ -60,9 +55,6 @@
     const npcPlayerSelect = document.getElementById("npcPlayerSelect");
     const npcRoleInput = document.getElementById("npcRoleInput");
     const npcTemplateFields = document.getElementById("npcTemplateFields");
-    const numeroSelect = document.getElementById("numeroSelect");
-    const paloSelect = document.getElementById("paloSelect");
-    const cardPlayerSelect = document.getElementById("cardPlayerSelect");
     const mediaTargetSelect = document.getElementById("mediaTargetSelect");
     const mediaTypeSelect = document.getElementById("mediaTypeSelect");
     const mediaFileSelect = document.getElementById("mediaFileSelect");
@@ -99,25 +91,12 @@
     const initiativeScoreInput = document.getElementById("initiativeScoreInput");
     const initiativeHpInput = document.getElementById("initiativeHpInput");
     const initiativeList = document.getElementById("initiativeList");
-    const doorCombinationSelect = document.getElementById("doorCombinationSelect");
-    const doorLengthInput = document.getElementById("doorLengthInput");
-    const doorAtLeastCountInput = document.getElementById("doorAtLeastCountInput");
-    const doorAtLeastKindSelect = document.getElementById("doorAtLeastKindSelect");
-    const doorSuitModeSelect = document.getElementById("doorSuitModeSelect");
-    const doorSuitSelect = document.getElementById("doorSuitSelect");
-    const doorRankFilterSelect = document.getElementById("doorRankFilterSelect");
-    const doorColorSelect = document.getElementById("doorColorSelect");
-    const doorParitySelect = document.getElementById("doorParitySelect");
-    const doorSummary = document.getElementById("doorSummary");
-    const doorResults = document.getElementById("doorResults");
-
     function populateSelects() {
       const activePlayers = players.filter((player) => player.active);
       const activeNames = activePlayers.map((player) => player.nombre);
 
       fillSelect(killPlayerSelect, activeNames, { preserveSelection: true });
       fillSelect(npcPlayerSelect, activePlayers.map((player) => ({ value: player.id, label: player.nombre })), { preserveSelection: true });
-      fillSelect(cardPlayerSelect, activeNames, { preserveSelection: true });
       fillSelect(mediaTargetSelect, [BROADCAST, ...activeNames], { preserveSelection: true });
       fillSelect(countdownTargetSelect, [BROADCAST, ...activeNames], { preserveSelection: true });
     }

@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import tempfile
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,7 +12,6 @@ from launcher_eva.web_app import STATE as LAUNCHER_STATE
 from launcher_eva.web_app import render_page as render_launcher_page
 
 from src.commands.musica import MUSIC_MAP
-from src.domain.door_rules import evaluate_door
 from src.domain.name_generator import FANTASY_RACE_LABELS, HUMAN_NAME_SETS, generate_names
 from src.domain.players import normalizar
 from src.services.network import get_base_url
@@ -28,8 +26,6 @@ WEB_SCRIPTS_PATH = WEB_ROOT / "scripts"
 WEB_STYLES_PATH = WEB_ROOT / "styles"
 WEB_ASSETS_PATH = WEB_ROOT / "assets"
 FAVICON_PATH = WEB_ASSETS_PATH / "eva_favicon.png"
-DOOR_CHALLENGES = {}
-EXCHANGE_POSTS = {}
 INCLUDE_PATTERN = re.compile(r"<!--\s*@include\s+([a-zA-Z0-9_./-]+)\s*-->")
 SCRIPT_PARTS = (
     "00-state-dom.js",
@@ -413,14 +409,10 @@ async def load_user_state(request):
 
     return web.json_response({
         "ok": True,
-        "data": db.cards.get_by_owner(username),
-        "cards": db.cards.get_by_owner(username),
         "user": user,
         "template": db.character_templates.active_template(),
         "sheet": sheet,
         "characters": characters,
-        "activeDoorChallenges": active_door_challenges_for_user(username),
-        "activeExchange": active_exchange_post_for_user(username),
     })
 
 
@@ -453,7 +445,6 @@ async def api_characters(request):
         "personajes": [
             {
                 **character,
-                "cards": context.db.cards.get_by_owner(character["playerName"]),
                 "sheet": context.db.character_templates.sheet_for_character(character["id"]),
             }
             for character in context.db.players.all_characters()
@@ -462,7 +453,7 @@ async def api_characters(request):
     })
 
 
-async def api_cards_status(request):
+async def api_status(request):
     context = request.app["context"]
 
     return web.json_response({
@@ -472,48 +463,11 @@ async def api_cards_status(request):
         "personajes": [
             {
                 **character,
-                "cards": context.db.cards.get_by_owner(character["playerName"]),
                 "sheet": context.db.character_templates.sheet_for_character(character["id"]),
             }
             for character in context.db.players.all_characters()
         ],
     })
-
-
-async def api_cards_assign(request):
-    context = request.app["context"]
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    numero = str(body.get("numero", "")).strip().lower()
-    palo = str(body.get("palo", "")).strip().lower()
-    jugador = normalize_user_or_broadcast(context.db, str(body.get("jugador", "")))
-
-    if not numero or jugador is None or jugador == "TODOS":
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Faltan carta o jugador.",
-        }, status=400)
-
-    if numero == "joker":
-        carta = "joker"
-    elif numero == "joker dorado":
-        carta = "joker dorado"
-    else:
-        carta = f"{numero} de {palo}"
-
-    resultado = context.db.cards.assign(carta, jugador)
-
-    if resultado.get("ok") and resultado.get("accion"):
-        await context.ws_queue.put(resultado["accion"])
-
-    return web.json_response(resultado, status=200 if resultado.get("ok") else 400)
 
 
 async def api_characters_create(request):
@@ -1164,600 +1118,6 @@ async def control_music(request):
     return web.json_response(result, status=200 if result["ok"] else 400)
 
 
-async def create_exchange_post(request):
-    context = request.app["context"]
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    raw_participants = body.get("participants")
-    if not isinstance(raw_participants, list):
-        raw_participants = []
-
-    participants = []
-    player_participants = []
-    for value in raw_participants:
-        player = normalize_user_or_broadcast(context.db, str(value))
-        if player is None or player == "TODOS" or player in participants:
-            continue
-        row = context.db.players.get(player)
-        if not row or not row["active"]:
-            continue
-        participants.append(player)
-        if not row["npc"]:
-            player_participants.append(player)
-
-    if len(participants) < 2 or not player_participants:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Elige al menos dos participantes y un jugador cliente.",
-        }, status=400)
-
-    close_active_exchange_posts(context, "replaced")
-    exchange = {
-        "id": f"exchange-{int(time.time() * 1000)}",
-        "participants": sorted(participants),
-        "playerParticipants": sorted(player_participants),
-        "declined": [],
-        "status": "active",
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
-    }
-    EXCHANGE_POSTS[exchange["id"]] = exchange
-    await broadcast_exchange(context, exchange, "EXCHANGE_OPEN")
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Puesto de intercambio abierto.",
-        "exchange": exchange,
-    })
-
-
-async def exchange_transfer(request):
-    context = request.app["context"]
-    exchange = EXCHANGE_POSTS.get(request.match_info["exchange_id"])
-
-    if exchange is None or exchange.get("status") != "active":
-        return web.json_response({
-            "ok": False,
-            "mensaje": "El puesto de intercambio no está activo.",
-        }, status=404)
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    sender = normalize_user_or_broadcast(context.db, str(body.get("username", "")))
-    recipient = normalize_user_or_broadcast(context.db, str(body.get("recipient", "")))
-    card = str(body.get("card", "")).strip()
-
-    if sender is None or sender == "TODOS" or sender not in exchange["playerParticipants"]:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "No participas en este puesto.",
-        }, status=403)
-
-    if sender in exchange.get("declined", []):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Ya has pasado en este puesto.",
-        }, status=403)
-
-    if recipient is None or recipient == "TODOS" or recipient not in exchange["participants"]:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Destino no disponible en este puesto.",
-        }, status=400)
-
-    result = context.db.cards.transfer_card(card, sender, recipient)
-    if not result.get("ok"):
-        return web.json_response(result, status=400)
-
-    transaction = {
-        "from": sender,
-        "to": recipient,
-        "card": card,
-        "completedAt": datetime.now(timezone.utc).isoformat(),
-    }
-    exchange["status"] = "completed"
-    exchange["transaction"] = transaction
-    exchange["updatedAt"] = transaction["completedAt"]
-
-    await context.ws_queue.put(result["accion"])
-    await broadcast_exchange(context, exchange, "EXCHANGE_CLOSED")
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": result["mensaje"],
-        "exchange": exchange,
-        "cards": context.db.cards.get_by_owner(sender),
-    })
-
-
-async def exchange_decline(request):
-    context = request.app["context"]
-    exchange = EXCHANGE_POSTS.get(request.match_info["exchange_id"])
-
-    if exchange is None or exchange.get("status") != "active":
-        return web.json_response({
-            "ok": False,
-            "mensaje": "El puesto de intercambio no está activo.",
-        }, status=404)
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    username = normalize_user_or_broadcast(context.db, str(body.get("username", "")))
-    if username is None or username == "TODOS" or username not in exchange["playerParticipants"]:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "No participas en este puesto.",
-        }, status=403)
-
-    if username not in exchange["declined"]:
-        exchange["declined"].append(username)
-        exchange["declined"].sort()
-    exchange["updatedAt"] = datetime.now(timezone.utc).isoformat()
-
-    if set(exchange["declined"]) >= set(exchange["playerParticipants"]):
-        exchange["status"] = "declined"
-        exchange["closedAt"] = exchange["updatedAt"]
-        await broadcast_exchange(context, exchange, "EXCHANGE_CLOSED")
-        mensaje = "Todos han rechazado el intercambio."
-    else:
-        await broadcast_exchange(context, exchange, "EXCHANGE_OPEN")
-        mensaje = "Intercambio rechazado para este jugador."
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": mensaje,
-        "exchange": exchange,
-    })
-
-
-async def cancel_exchange_post(request):
-    context = request.app["context"]
-    exchange_id = request.match_info.get("exchange_id")
-    exchange = EXCHANGE_POSTS.get(exchange_id) if exchange_id else active_exchange_post()
-
-    if exchange is None:
-        return web.json_response({
-            "ok": True,
-            "mensaje": "No hay puesto de intercambio activo.",
-        })
-
-    exchange["status"] = "cancelled"
-    exchange["cancelledAt"] = datetime.now(timezone.utc).isoformat()
-    exchange["updatedAt"] = exchange["cancelledAt"]
-    await broadcast_exchange(context, exchange, "EXCHANGE_CLOSED")
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Puesto de intercambio cancelado.",
-        "exchange": exchange,
-    })
-
-
-def active_exchange_post():
-    for exchange in EXCHANGE_POSTS.values():
-        if exchange.get("status") == "active":
-            return exchange
-    return None
-
-
-def close_active_exchange_posts(context, reason: str):
-    now = datetime.now(timezone.utc).isoformat()
-    for exchange in EXCHANGE_POSTS.values():
-        if exchange.get("status") == "active":
-            exchange["status"] = reason
-            exchange["closedAt"] = now
-            exchange["updatedAt"] = now
-
-
-async def broadcast_exchange(context, exchange: dict, event_type: str):
-    await context.ws_queue.put({
-        "tipo": event_type,
-        "destinatario": "TODOS",
-        "valor": exchange,
-    })
-
-
-async def evaluate_door_endpoint(request):
-    context = request.app["context"]
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    participant_type = str(body.get("participantType", "players")).strip().lower()
-    use_npc = participant_type == "npcs"
-    active_players = {
-        player["nombre"]
-        for player in context.db.players.all()
-        if player["active"] and bool(player["npc"]) is use_npc
-    }
-    cards = [
-        card
-        for card in context.db.cards.get_owned()
-        if card["owner"] in active_players
-    ]
-    result = evaluate_door(cards, body)
-    challenge = create_door_challenge(body, result, active_players)
-
-    if challenge is not None:
-        DOOR_CHALLENGES[challenge["id"]] = challenge
-        await broadcast_door_challenge(context, challenge)
-        result["challenge"] = challenge
-
-    return web.json_response(result)
-
-
-async def update_door_challenge_slot(request):
-    context = request.app["context"]
-    challenge = DOOR_CHALLENGES.get(request.match_info["challenge_id"])
-
-    if challenge is None:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Puerta no encontrada.",
-        }, status=404)
-
-    if challenge.get("status") not in ("active", "pending_validation"):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Esta puerta ya no acepta cambios.",
-        }, status=400)
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    username = normalize_user_or_broadcast(context.db, str(body.get("username", "")))
-    card = str(body.get("card", "")).strip()
-
-    try:
-        slot_index = int(body.get("slotIndex"))
-    except (TypeError, ValueError):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Hueco inválido.",
-        }, status=400)
-
-    if username is None or username == "TODOS":
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Jugador no reconocido.",
-        }, status=404)
-
-    if username not in challenge["participants"]:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "No participas en esta puerta.",
-        }, status=403)
-
-    if slot_index < 0 or slot_index >= len(challenge["slots"]):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Hueco fuera de rango.",
-        }, status=400)
-
-    if card not in context.db.cards.get_by_owner(username):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Esa carta no está en tu mano.",
-        }, status=403)
-
-    clear_player_card_from_challenge(challenge, username, card)
-    challenge["slots"][slot_index] = {
-        "index": slot_index,
-        "card": card,
-        "owner": username,
-    }
-    refresh_challenge_status(challenge)
-    await broadcast_door_challenge(context, challenge)
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Propuesta enviada a EVA." if challenge["status"] == "pending_validation" else "Carta colocada.",
-        "challenge": challenge,
-    })
-
-
-async def clear_door_challenge_slot(request):
-    context = request.app["context"]
-    challenge = DOOR_CHALLENGES.get(request.match_info["challenge_id"])
-
-    if challenge is None:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Puerta no encontrada.",
-        }, status=404)
-
-    if challenge.get("status") not in ("active", "pending_validation"):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Esta puerta ya no acepta cambios.",
-        }, status=400)
-
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "JSON inválido.",
-        }, status=400)
-
-    username = normalize_user_or_broadcast(context.db, str(body.get("username", "")))
-
-    try:
-        slot_index = int(body.get("slotIndex"))
-    except (TypeError, ValueError):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Hueco inválido.",
-        }, status=400)
-
-    if username is None or username == "TODOS":
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Jugador no reconocido.",
-        }, status=404)
-
-    if slot_index < 0 or slot_index >= len(challenge["slots"]):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Hueco fuera de rango.",
-        }, status=400)
-
-    slot = challenge["slots"][slot_index]
-    if slot.get("owner") != username:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Solo puedes quitar una carta que hayas puesto tú.",
-        }, status=403)
-
-    challenge["slots"][slot_index] = {
-        "index": slot_index,
-        "card": None,
-        "owner": None,
-    }
-    refresh_challenge_status(challenge)
-    await broadcast_door_challenge(context, challenge)
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Carta retirada.",
-        "challenge": challenge,
-    })
-
-
-async def resolve_door_challenge(request):
-    context = request.app["context"]
-    challenge = DOOR_CHALLENGES.get(request.match_info["challenge_id"])
-
-    if challenge is None:
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Puerta no encontrada.",
-        }, status=404)
-
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    action = str(body.get("action", "")).strip().lower()
-    if action not in ("approve", "reject"):
-        return web.json_response({
-            "ok": False,
-            "mensaje": "Decisión no reconocida.",
-        }, status=400)
-
-    now = datetime.now(timezone.utc).isoformat()
-    challenge["status"] = "approved" if action == "approve" else "rejected"
-    challenge["resolvedAt"] = now
-    challenge["updatedAt"] = now
-    await broadcast_door_challenge(context, challenge)
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Puerta validada." if action == "approve" else "Puerta rechazada.",
-        "challenge": challenge,
-    })
-
-
-async def cancel_door_challenge(request):
-    context = request.app["context"]
-
-    now = datetime.now(timezone.utc).isoformat()
-    cancelled = []
-    for challenge in DOOR_CHALLENGES.values():
-        if challenge.get("status") in ("active", "pending_validation"):
-            challenge["status"] = "cancelled"
-            challenge["cancelledAt"] = now
-            challenge["updatedAt"] = now
-            cancelled.append(challenge)
-
-    action = {
-        "tipo": "DOOR_CANCEL",
-        "destinatario": "TODOS",
-        "valor": {
-            "cancelledAt": now,
-            "challenges": cancelled,
-        },
-    }
-    await context.ws_queue.put(action)
-
-    return web.json_response({
-        "ok": True,
-        "mensaje": "Puerta cancelada.",
-        "accion": action,
-    })
-
-
-def create_door_challenge(rules: dict, result: dict, active_players: set[str]):
-    slot_count = door_slot_count(rules)
-
-    if slot_count is None or not active_players:
-        return None
-
-    now = datetime.now(timezone.utc).isoformat()
-
-    return {
-        "id": f"door-{int(time.time() * 1000)}",
-        "requirement": door_requirement_text(rules),
-        "rules": {
-            "combination": rules.get("combination", "pair"),
-            "straightLength": parse_positive_int(rules.get("straightLength")),
-            "groupSize": parse_positive_int(rules.get("groupSize")),
-            "atLeastCount": parse_positive_int(rules.get("atLeastCount")),
-            "atLeastKind": rules.get("atLeastKind", "odd"),
-            "suitMode": rules.get("suitMode", "any"),
-            "suit": rules.get("suit"),
-            "rankFilter": rules.get("rankFilter", "any"),
-            "color": rules.get("color", "any"),
-            "parity": rules.get("parity", "any"),
-        },
-        "slotCount": slot_count,
-        "slots": [{"index": index, "card": None, "owner": None} for index in range(slot_count)],
-        "participants": sorted(active_players),
-        "matchCount": result.get("matchCount", 0),
-        "status": "active",
-        "createdAt": now,
-        "updatedAt": now,
-    }
-
-
-def door_slot_count(rules: dict):
-    combination = rules.get("combination", "pair")
-
-    if combination == "pair":
-        return 2
-    if combination == "three":
-        return 3
-    if combination == "four":
-        return 4
-    if combination == "full_house":
-        return 5
-    if combination == "straight":
-        return parse_positive_int(rules.get("straightLength")) or 4
-    if combination == "flush":
-        return parse_positive_int(rules.get("groupSize")) or 4
-    if combination == "at_least":
-        return parse_positive_int(rules.get("groupSize")) or parse_positive_int(rules.get("atLeastCount")) or 3
-
-    return None
-
-
-def door_requirement_text(rules: dict):
-    at_least_count = parse_positive_int(rules.get("atLeastCount")) or 3
-    at_least_labels = {
-        "odd": "impares",
-        "even": "pares",
-        "figures": "figuras",
-        "red": "rojas",
-        "black": "negras",
-        "same_suit": "del mismo palo",
-    }
-    combination_labels = {
-        "pair": "Pareja",
-        "three": "Trío",
-        "four": "Poker",
-        "full_house": "Full house",
-        "straight": f"Escalera de {parse_positive_int(rules.get('straightLength')) or 4}",
-        "flush": f"Palo / color de {parse_positive_int(rules.get('groupSize')) or 4}",
-        "at_least": f"Al menos {at_least_count} {at_least_labels.get(rules.get('atLeastKind'), 'cartas válidas')}",
-    }
-    parts = [combination_labels.get(rules.get("combination", "pair"), "Combinación")]
-
-    if rules.get("combination") == "at_least":
-        group_size = parse_positive_int(rules.get("groupSize"))
-        if group_size and group_size != at_least_count:
-            parts.append(f"en {group_size} huecos")
-        return " · ".join(parts)
-
-    if rules.get("suitMode") == "same":
-        parts.append("mismo palo")
-    elif rules.get("suitMode") == "specific" and rules.get("suit"):
-        parts.append(str(rules["suit"]))
-
-    if rules.get("rankFilter") == "figures":
-        parts.append("solo figuras")
-
-    if rules.get("color") == "red":
-        parts.append("rojas")
-    elif rules.get("color") == "black":
-        parts.append("negras")
-
-    if rules.get("parity") == "even":
-        parts.append("pares")
-    elif rules.get("parity") == "odd":
-        parts.append("impares")
-
-    return " · ".join(parts)
-
-
-def clear_player_card_from_challenge(challenge: dict, username: str, card: str):
-    for slot in challenge["slots"]:
-        if slot.get("owner") == username and slot.get("card") == card:
-            slot["card"] = None
-            slot["owner"] = None
-
-
-def refresh_challenge_status(challenge: dict):
-    now = datetime.now(timezone.utc).isoformat()
-    challenge["status"] = "pending_validation" if all(slot.get("card") for slot in challenge["slots"]) else "active"
-    challenge["updatedAt"] = now
-
-
-def active_door_challenges_for_user(username: str):
-    return [
-        challenge
-        for challenge in DOOR_CHALLENGES.values()
-        if challenge.get("status") in ("active", "pending_validation")
-        and username in challenge.get("participants", [])
-    ]
-
-
-def active_exchange_post_for_user(username: str):
-    exchange = active_exchange_post()
-    if exchange is None:
-        return None
-    if username not in exchange.get("participants", []):
-        return None
-    return exchange
-
-
-async def broadcast_door_challenge(context, challenge: dict):
-    await context.ws_queue.put({
-        "tipo": "DOOR_CHALLENGE",
-        "destinatario": "TODOS",
-        "valor": challenge,
-    })
-
-
 async def start_web_server(context):
     app = web.Application(client_max_size=128 * 1024 * 1024)
     app["context"] = context
@@ -1794,8 +1154,7 @@ async def start_web_server(context):
     app.router.add_get("/api/users", api_users)
     app.router.add_post("/api/users", api_users_create)
     app.router.add_delete("/api/users/{username}", api_users_delete)
-    app.router.add_get("/api/cards/status", api_cards_status)
-    app.router.add_post("/api/cards/assign", api_cards_assign)
+    app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_post("/api/characters", api_characters_create)
     app.router.add_delete("/api/characters/{character_id}", api_character_delete)
@@ -1822,17 +1181,6 @@ async def start_web_server(context):
     app.router.add_get("/api/music/status", music_status)
     app.router.add_post("/api/music/play", play_music)
     app.router.add_post("/api/music/control", control_music)
-    app.router.add_post("/api/exchanges", create_exchange_post)
-    app.router.add_post("/api/exchanges/cancel", cancel_exchange_post)
-    app.router.add_post("/api/exchanges/{exchange_id}/transfer", exchange_transfer)
-    app.router.add_post("/api/exchanges/{exchange_id}/decline", exchange_decline)
-    app.router.add_post("/api/exchanges/{exchange_id}/cancel", cancel_exchange_post)
-    app.router.add_post("/api/doors/evaluate", evaluate_door_endpoint)
-    app.router.add_post("/api/doors/cancel", cancel_door_challenge)
-    app.router.add_post("/api/doors/challenges/{challenge_id}/slots", update_door_challenge_slot)
-    app.router.add_delete("/api/doors/challenges/{challenge_id}/slots", clear_door_challenge_slot)
-    app.router.add_post("/api/doors/challenges/{challenge_id}/resolve", resolve_door_challenge)
-
     media_path = Path(os.environ.get("EVA_MEDIA_ROOT") or "media").resolve()
     media_path.mkdir(parents=True, exist_ok=True)
     app.router.add_static("/media/", path=media_path, name="media")

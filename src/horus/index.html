@@ -38,22 +38,13 @@
       </header>
 
       <nav class="tabs" aria-label="Vistas">
-        <button class="tab active" type="button" data-view="cards">Cartas</button>
-        <button class="tab" type="button" data-view="sheet">Ficha</button>
+        <button class="tab active" type="button" data-view="sheet">Ficha</button>
         <button class="tab" type="button" data-view="scene">Escena</button>
       </nav>
 
       <div id="statusLine" class="status-line">Listo.</div>
 
-      <section id="cardsView" class="view active">
-        <div class="section-header">
-          <h2>Mano</h2>
-          <span id="cardCount" class="counter">0</span>
-        </div>
-        <div id="cardsList" class="cards-grid"></div>
-      </section>
-
-      <section id="sheetView" class="view">
+      <section id="sheetView" class="view active">
         <div class="section-header">
           <h2>Ficha</h2>
           <button id="saveSheetButton" class="secondary" type="button">Guardar</button>
@@ -63,8 +54,6 @@
 
       <section id="sceneView" class="view">
         <div id="countdownPanel" class="panel" hidden></div>
-        <div id="doorPanel" class="panel" hidden></div>
-        <div id="exchangePanel" class="panel" hidden></div>
         <div class="panel dice-roller">
           <div class="panel-title">Dados</div>
           <div class="dice-form">

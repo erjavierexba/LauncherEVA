@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .db_domains.cards import CardsRepository
 from .db_domains.character_templates import CharacterTemplatesRepository
 from .db_domains.players import PlayersRepository
 
@@ -18,7 +17,6 @@ class DB:
         self.conn.row_factory = sqlite3.Row
 
         self.character_templates = CharacterTemplatesRepository(self.conn)
-        self.cards = CardsRepository(self.conn)
         self.players = PlayersRepository(
             self.conn,
             initial_users=initial_users,

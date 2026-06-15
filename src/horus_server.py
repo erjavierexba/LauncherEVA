@@ -12,15 +12,9 @@ from src.web_server import (
     api_character_sheet_update_by_id,
     api_config,
     api_dice_roll_create,
-    cancel_door_challenge,
-    cancel_exchange_post,
-    clear_door_challenge_slot,
-    exchange_decline,
-    exchange_transfer,
     load_user_state,
     login,
     no_store_headers,
-    update_door_challenge_slot,
 )
 
 
@@ -125,13 +119,6 @@ async def start_horus_server(context):
     app.router.add_put("/api/characters/by-id/{character_id}/sheet", api_character_sheet_update_by_id)
     app.router.add_put("/api/characters/{username}/sheet", api_character_sheet_update)
     app.router.add_post("/api/dice-rolls", api_dice_roll_create)
-    app.router.add_post("/api/exchanges/{exchange_id}/transfer", exchange_transfer)
-    app.router.add_post("/api/exchanges/{exchange_id}/decline", exchange_decline)
-    app.router.add_post("/api/exchanges/{exchange_id}/cancel", cancel_exchange_post)
-    app.router.add_post("/api/doors/cancel", cancel_door_challenge)
-    app.router.add_post("/api/doors/challenges/{challenge_id}/slots", update_door_challenge_slot)
-    app.router.add_delete("/api/doors/challenges/{challenge_id}/slots", clear_door_challenge_slot)
-
     media_path = Path(os.environ.get("EVA_MEDIA_ROOT") or "media").resolve()
     media_path.mkdir(parents=True, exist_ok=True)
     app.router.add_static("/media/", path=media_path, name="media")

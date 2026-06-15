@@ -59,18 +59,10 @@
         if (data.estado) {
           renderMusicStatus(data.estado);
         }
-        await loadCardsStatus();
+        await loadStatus();
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
       }
-    }
-
-    async function assignCard() {
-      return api("/api/cards/assign", {
-        numero: numeroSelect.value,
-        palo: paloSelect.value,
-        jugador: cardPlayerSelect.value,
-      });
     }
 
     async function sendMedia() {
@@ -111,60 +103,6 @@
       return api("/api/music/control", { action });
     }
 
-    async function cancelDoor() {
-      const data = await api("/api/doors/cancel");
-      for (const challenge of data.accion?.valor?.challenges || []) {
-        renderDoorChallenge(challenge);
-      }
-      return data;
-    }
-
-    async function startExchange() {
-      const participants = [...exchangeParticipants.querySelectorAll("[data-exchange-participant]")]
-        .filter((checkbox) => checkbox.checked)
-        .map((checkbox) => checkbox.dataset.exchangeParticipant);
-
-      const data = await api("/api/exchanges", { participants });
-      activeExchange = data.exchange || null;
-      renderExchange(activeExchange);
-      closeExchangeModal();
-      return data;
-    }
-
-    async function cancelExchange() {
-      const data = await api("/api/exchanges/cancel");
-      activeExchange = data.exchange || null;
-      renderExchange(activeExchange);
-      return data;
-    }
-
-    async function evaluateDoor() {
-      const data = await api("/api/doors/evaluate", {
-        participantType: "players",
-        combination: doorCombinationSelect.value,
-        straightLength: doorLengthInput.value,
-        groupSize: doorLengthInput.value,
-        atLeastCount: doorAtLeastCountInput.value,
-        atLeastKind: doorAtLeastKindSelect.value,
-        suitMode: doorSuitModeSelect.value,
-        suit: doorSuitSelect.value,
-        rankFilter: doorRankFilterSelect.value,
-        color: doorColorSelect.value,
-        parity: doorParitySelect.value,
-      });
-
-      renderDoorResults(data);
-
-      return {
-        ok: true,
-        mensaje: `${data.matchCount} ruta(s) posible(s). Puerta enviada al cliente.`,
-      };
-    }
-
-    async function resolveDoor(challengeId, action) {
-      return api(`/api/doors/challenges/${encodeURIComponent(challengeId)}/resolve`, { action });
-    }
-
     async function eliminatePlayer() {
       const jugador = killPlayerSelect.value;
       const response = await fetch(`/api/users/${encodeURIComponent(jugador)}`, { method: "DELETE" });
@@ -191,7 +129,7 @@
       });
       npcNameInput.value = "";
       npcRoleInput.value = "";
-      await loadCardsStatus();
+      await loadStatus();
       return data;
     }
 
@@ -210,9 +148,9 @@
       };
     }
 
-    async function loadCardsStatus() {
+    async function loadStatus() {
       try {
-        const response = await fetch("/api/cards/status");
+        const response = await fetch("/api/status");
         const data = await response.json();
 
         if (!data.ok) {
@@ -1042,52 +980,4 @@
 
       musicStateLabel.textContent = estado.paused ? "Pausada" : estado.playing ? "Sonando" : "Cargada";
       musicCurrentTitle.textContent = estado.current.label || estado.current.path || "Música";
-    }
-
-    function renderDoorSummary() {
-      const combinationLabels = {
-        at_least: "Al menos",
-        pair: "Pareja",
-        three: "Trío",
-        four: "Poker",
-        full_house: "Full house",
-        straight: "Escalera",
-        flush: "Palo / color",
-      };
-      const atLeastLabels = {
-        odd: "impares",
-        even: "pares",
-        figures: "figuras",
-        red: "rojas",
-        black: "negras",
-        same_suit: "del mismo palo",
-      };
-      const parts = [
-        `${combinationLabels[doorCombinationSelect.value] || "Puerta"}`,
-        `${doorLengthInput.value || 0} huecos`,
-      ];
-
-      if (doorCombinationSelect.value === "at_least") {
-        parts.push(`mínimo ${doorAtLeastCountInput.value || 0} ${atLeastLabels[doorAtLeastKindSelect.value] || ""}`.trim());
-      }
-
-      if (doorSuitModeSelect.value === "specific") {
-        parts.push(`palo: ${doorSuitSelect.options[doorSuitSelect.selectedIndex]?.textContent || doorSuitSelect.value}`);
-      } else if (doorSuitModeSelect.value === "same") {
-        parts.push("un palo a elegir");
-      }
-
-      if (doorRankFilterSelect.value === "figures") {
-        parts.push("solo figuras");
-      }
-
-      if (doorColorSelect.value !== "any") {
-        parts.push(doorColorSelect.options[doorColorSelect.selectedIndex]?.textContent || doorColorSelect.value);
-      }
-
-      if (doorParitySelect.value !== "any") {
-        parts.push(doorParitySelect.options[doorParitySelect.selectedIndex]?.textContent || doorParitySelect.value);
-      }
-
-      doorSummary.textContent = parts.join(" · ");
     }

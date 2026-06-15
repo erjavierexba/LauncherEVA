@@ -1172,7 +1172,7 @@
 
       closeTemplateJsonModal();
       await loadTemplates(data.template?.id || templateJsonSourceId);
-      await loadCardsStatus();
+      await loadStatus();
 
       return { ok: true, mensaje: "Plantilla JSON guardada." };
     }
@@ -1214,7 +1214,7 @@
       }
 
       await loadTemplates(template.id);
-      await loadCardsStatus();
+      await loadStatus();
 
       return { ok: true, mensaje: "Plantilla guardada." };
     }
@@ -1225,7 +1225,7 @@
 
       const data = await api(`/api/templates/${template.id}/activate`);
       await loadTemplates(data.template?.id || template.id);
-      await loadCardsStatus();
+      await loadStatus();
 
       return { ok: true, mensaje: `${data.template?.label || "Plantilla"} activada.` };
     }
@@ -1246,7 +1246,7 @@
       }
 
       await loadTemplates();
-      await loadCardsStatus();
+      await loadStatus();
 
       return { ok: true, mensaje: "Plantilla eliminada." };
     }
