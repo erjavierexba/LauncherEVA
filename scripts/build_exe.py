@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,18 @@ def main() -> int:
         "vosk",
     ]
 
+    data_args = [
+        *add_data_args(ROOT / "main.py", "."),
+        *add_data_args(ROOT / "requirements.txt", "."),
+        *add_data_args(ROOT / "Eva_icon.png", "."),
+        *add_data_args(ROOT / "src", "src"),
+        *add_data_args(ROOT / "config", "config"),
+        *add_data_args(ROOT / "media", "media"),
+        *add_data_args(ROOT / "assets", "assets"),
+    ]
+    if os.environ.get("LAUNCHER_EVA_EMBED_VENDOR") == "1":
+        data_args.extend(add_data_args(ROOT / "vendor", "vendor"))
+
     command = [
         sys.executable,
         "-m",
@@ -38,14 +51,7 @@ def main() -> int:
         "--paths",
         str(ROOT / "src"),
         *[arg for module in hidden_imports for arg in ("--hidden-import", module)],
-        *add_data_args(ROOT / "main.py", "."),
-        *add_data_args(ROOT / "requirements.txt", "."),
-        *add_data_args(ROOT / "Eva_icon.png", "."),
-        *add_data_args(ROOT / "src", "src"),
-        *add_data_args(ROOT / "config", "config"),
-        *add_data_args(ROOT / "media", "media"),
-        *add_data_args(ROOT / "assets", "assets"),
-        *add_data_args(ROOT / "vendor", "vendor"),
+        *data_args,
         str(ROOT / "src" / "launcher_eva" / "desktop.py"),
     ]
     return subprocess.call(command, cwd=ROOT)
