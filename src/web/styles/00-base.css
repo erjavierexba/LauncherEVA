@@ -104,6 +104,40 @@ body {
       justify-content: flex-end;
     }
 
+    .client-address {
+      max-width: min(460px, 42vw);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+      align-items: center;
+      padding: 7px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-deep);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .client-address span {
+      grid-column: 1 / -1;
+    }
+
+    .client-address strong {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--accent-strong);
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .client-address button {
+      min-height: 28px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+
     main {
       height: calc(100vh - 58px);
       min-height: 0;

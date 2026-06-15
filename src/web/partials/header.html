@@ -11,6 +11,11 @@
     <button class="view-tab" type="button" data-panel-filter="admin">Admin</button>
   </nav>
   <div class="header-actions">
+    <div class="client-address">
+      <span>La aplicación para los jugadores está desplegada en:</span>
+      <strong id="clientAddressText">{{CLIENT_ADDRESS}}</strong>
+      <button id="copyClientAddressButton" class="compact secondary" type="button" data-copy-text="{{CLIENT_ADDRESS}}">Copiar</button>
+    </div>
     <label class="switch-row">
       <span>Checks jugadores</span>
       <input id="checksNpcSwitch" type="checkbox" />

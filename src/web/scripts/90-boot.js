@@ -52,6 +52,20 @@
     document.getElementById("validateTemplateJsonButton").addEventListener("click", validateTemplateJson);
     document.getElementById("saveTemplateJsonButton").addEventListener("click", () => runAction(saveTemplateJson));
     document.getElementById("refreshButton").addEventListener("click", loadCardsStatus);
+    document.getElementById("copyClientAddressButton")?.addEventListener("click", async (event) => {
+      const text = event.currentTarget.dataset.copyText || "";
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (error) {
+        const input = document.createElement("input");
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      setStatus(`Copiado: ${text}`);
+    });
     document.getElementById("resetClientButton").addEventListener("click", () => runAction(resetClient));
     document.getElementById("openPlayersButton").addEventListener("click", openPlayersModal);
     document.getElementById("closePlayersButton").addEventListener("click", closePlayersModal);

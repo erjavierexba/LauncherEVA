@@ -16,6 +16,7 @@ from src.commands.musica import MUSIC_MAP
 from src.domain.door_rules import evaluate_door
 from src.domain.name_generator import FANTASY_RACE_LABELS, HUMAN_NAME_SETS, generate_names
 from src.domain.players import normalizar
+from src.services.network import get_base_url
 from src.ws_server import start_ws_loop, stop_ws_loop, websocket_handler
 
 
@@ -63,6 +64,7 @@ def render_html(context, ws_url: str) -> str:
     project = context.config.data.get("project", {})
     app_title = str(theme.get("title") or assistant.get("name") or "EVA")
     role_subtitle = str(project.get("roleName") or project.get("appSubtitle") or assistant.get("name") or "EVA")
+    client_address = get_base_url(context.horus_port).removeprefix("http://").removeprefix("https://")
 
     return (
         html
@@ -70,6 +72,7 @@ def render_html(context, ws_url: str) -> str:
         .replace("{{SESSION_ID}}", str(context.session_id))
         .replace("{{APP_TITLE}}", app_title)
         .replace("{{ROLE_SUBTITLE}}", role_subtitle)
+        .replace("{{CLIENT_ADDRESS}}", client_address)
         .replace("{{THEME_JSON}}", json.dumps(theme, ensure_ascii=False))
     )
 

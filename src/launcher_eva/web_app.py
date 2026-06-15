@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from src.services.network import get_base_url
+
 
 APP_TITLE = "Launcher EVA"
 PUBLIC_BRANCH = "public_release"
@@ -886,6 +888,8 @@ def render_page() -> str:
     eva_running = STATE.embedded_mode or (STATE.eva_process is not None and STATE.eva_process.poll() is None)
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
+    client_port = parse_port(settings.get("client_port"), 8080)
+    client_address = get_base_url(client_port).removeprefix("http://").removeprefix("https://")
     log_text = "\n".join(STATE.logs[-180:])
     preset_buttons = "".join(
         f'<button name="preset" value="{h(key)}">{h(value["label"])}</button>'
@@ -963,6 +967,10 @@ def render_page() -> str:
     button.primary {{ background:#1f4f66; border-color:var(--accent); }}
     button:hover, a.button:hover {{ border-color:var(--accent); }}
     .actions {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }}
+    .client-share {{ grid-column:1 / -1; display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:6px 10px; align-items:center; padding:11px; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
+    .client-share span {{ grid-column:1 / -1; color:var(--muted); font-size:12px; font-weight:800; }}
+    .client-share strong {{ min-width:0; overflow:hidden; color:var(--accent); font-size:16px; text-overflow:ellipsis; white-space:nowrap; }}
+    .client-share button {{ min-width:98px; }}
     .embedded-note {{ min-height:36px; display:inline-flex; align-items:center; color:var(--muted); font-weight:800; }}
     table {{ width:100%; border-collapse:collapse; }}
     th, td {{ border-bottom:1px solid #2b3543; padding:8px; text-align:left; vertical-align:top; }}
@@ -991,6 +999,11 @@ def render_page() -> str:
         <label class="span2">Subtítulo app<input name="app_subtitle" value="{h(settings.get('app_subtitle', 'EVA mantiene el vinculo abierto'))}"></label>
         <label>Puerto EVA/configurador<input name="web_port" value="{h(settings.get('web_port', '8000'))}"></label>
         <label>Puerto cliente móvil<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
+        <div class="client-share">
+          <span>La aplicación para los jugadores está desplegada en:</span>
+          <strong id="configClientAddress">{h(client_address)}</strong>
+          <button type="button" data-copy-client-address="{h(client_address)}">Copiar</button>
+        </div>
         <label class="span2">Microfono EVA<select name="microphone_device">{microphone_options}</select></label>
         <div class="actions span2"><button class="primary">Guardar configuración y propagar</button></div>
       </form>
@@ -1215,6 +1228,23 @@ def render_page() -> str:
       }}
     }});
   }}
+  document.querySelectorAll("[data-copy-client-address]").forEach((button) => {{
+    button.addEventListener("click", async () => {{
+      const text = button.dataset.copyClientAddress || "";
+      try {{
+        await navigator.clipboard.writeText(text);
+      }} catch (error) {{
+        const input = document.createElement("input");
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }}
+      button.textContent = "Copiado";
+      setTimeout(() => {{ button.textContent = "Copiar"; }}, 1400);
+    }});
+  }});
 </script>
 </body>
 </html>"""
