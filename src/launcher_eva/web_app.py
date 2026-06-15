@@ -184,7 +184,6 @@ def default_settings() -> dict:
     return {
         "role_name": "EVA",
         "app_subtitle": "EVA mantiene el vinculo abierto",
-        "android_package": "com.eva.horus",
         "web_port": "8000",
         "client_port": "8080",
         "microphone_device": "",
@@ -227,13 +226,6 @@ def slugify(text: str) -> str:
 
 def app_slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", normalize(text)).strip("-") or "rol"
-
-
-def package_slug(text: str) -> str:
-    value = re.sub(r"[^a-z0-9]+", "_", normalize(text)).strip("_") or "rol"
-    if not value[0].isalpha():
-        value = f"r_{value}"
-    return value
 
 
 def unique_path(directory: Path, filename: str) -> Path:
@@ -325,6 +317,7 @@ class LauncherState:
         loaded = load_json(self.settings_path, {})
         if isinstance(loaded, dict):
             self.settings.update(loaded)
+        self.settings.pop("android_package", None)
         self.logs: list[str] = []
         self.events: queue.Queue[str] = queue.Queue()
         self.eva_process: subprocess.Popen | None = None
@@ -342,15 +335,12 @@ class LauncherState:
         for key in [
             "role_name",
             "app_subtitle",
-            "android_package",
             "web_port",
             "client_port",
             "microphone_device",
         ]:
             if key in form:
                 self.settings[key] = form[key].strip()
-        if not self.settings.get("android_package"):
-            self.settings["android_package"] = f"com.eva.{package_slug(self.settings.get('role_name', 'rol'))}"
         save_json(self.settings_path, self.settings)
         self.log("Configuración del launcher guardada.")
         self.apply_release_configuration()
@@ -961,7 +951,6 @@ def render_page() -> str:
     media = STATE.media_items()
     settings = STATE.settings
     role_name = settings.get("role_name", "EVA")
-    default_package = settings.get("android_package") or f"com.eva.{package_slug(role_name)}"
     eva_running = STATE.embedded_mode or (STATE.eva_process is not None and STATE.eva_process.poll() is None)
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
@@ -992,11 +981,13 @@ def render_page() -> str:
         runtime_controls = (
             '<span class="embedded-note">EVA está arrancada desde main.py</span>'
         )
+        reset_control = '<form class="actions" method="post" action="/client/reset"><button>Reset cliente</button></form>'
     else:
         runtime_controls = (
             '<form method="post" action="/start-eva"><button>Arrancar EVA</button></form>'
             '<form method="post" action="/stop-eva"><button>Detener EVA</button></form>'
         )
+        reset_control = ""
     return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -1016,8 +1007,13 @@ def render_page() -> str:
     label {{ display:grid; gap:5px; color:var(--muted); font-size:12px; font-weight:800; }}
     input, textarea, select {{ width:100%; min-height:36px; border:1px solid #394554; border-radius:6px; background:#0c1016; color:var(--text); padding:8px 9px; }}
     input[type="color"] {{ width:44px; min-width:44px; height:36px; min-height:36px; padding:2px; cursor:pointer; }}
+    input[type="file"].drop-input {{ position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }}
     textarea {{ min-height:94px; resize:vertical; }}
     .color-field {{ display:grid; grid-template-columns:44px minmax(0, 1fr); gap:8px; align-items:center; }}
+    .drop-zone {{ min-height:138px; display:grid; place-items:center; gap:8px; padding:18px; border:1px dashed #52667d; border-radius:8px; background:#0c1016; color:var(--muted); text-align:center; cursor:pointer; transition:border-color .16s ease, background .16s ease, color .16s ease; }}
+    .drop-zone strong {{ color:var(--text); font-size:15px; }}
+    .drop-zone.dragging {{ border-color:var(--accent); background:#102333; color:var(--text); }}
+    .file-list {{ margin:0; padding-left:18px; color:var(--muted); font-size:12px; }}
     button, a.button {{ min-height:36px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #52667d; border-radius:6px; background:#1b2a38; color:var(--text); padding:8px 11px; text-decoration:none; font-weight:800; cursor:pointer; }}
     button.primary {{ background:#1f4f66; border-color:var(--accent); }}
     button:hover, a.button:hover {{ border-color:var(--accent); }}
@@ -1047,7 +1043,6 @@ def render_page() -> str:
       <h2>Rol y release</h2>
       <form class="grid" method="post" action="/settings">
         <label>Nombre del rol / app<input name="role_name" value="{h(role_name)}"></label>
-        <label>Package Android<input name="android_package" value="{h(default_package)}"></label>
         <label class="span2">Subtítulo app<input name="app_subtitle" value="{h(settings.get('app_subtitle', 'EVA mantiene el vinculo abierto'))}"></label>
         <label>Puerto EVA/configurador<input name="web_port" value="{h(settings.get('web_port', '8000'))}"></label>
         <label>Puerto cliente móvil<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
@@ -1058,6 +1053,7 @@ def render_page() -> str:
         <button name="target" value="both">Pull public_release</button>
       </form>
       <form class="actions" method="post" action="/apply-release"><button>Reaplicar configuración</button></form>
+      {reset_control}
       <form class="actions" method="post" action="/prepare-workflow"><button class="primary">Preparar workflow completo</button></form>
     </section>
 
@@ -1080,9 +1076,17 @@ def render_page() -> str:
     <section>
       <h2>Archivos</h2>
       <form class="grid" method="post" action="/media/upload" enctype="multipart/form-data">
-        <label>Archivo<input type="file" name="file"></label>
-        <label>Nombre visible<input name="name"></label>
+        <label class="span2">Archivos
+          <span id="mediaDropZone" class="drop-zone">
+            <strong>Suelta archivos aquí</strong>
+            <span>o pulsa para seleccionarlos</span>
+            <small>Imágenes, vídeo, audio, PDF y markdown</small>
+          </span>
+          <input id="mediaFileInput" class="drop-input" type="file" name="file" multiple>
+        </label>
+        <label>Nombre visible<input name="name" placeholder="Opcional; se usa en subidas de un solo archivo"></label>
         <label class="span2">Alias separados por coma<input name="aliases"></label>
+        <ul id="mediaSelectedFiles" class="file-list"></ul>
         <div class="actions span2"><button>Subir a media</button></div>
       </form>
       <table><thead><tr><th>Archivo</th><th>Tipo</th><th>Alias</th><th></th></tr></thead><tbody>{media_rows}</tbody></table>
@@ -1129,6 +1133,40 @@ def render_page() -> str:
       }}
     }});
   }});
+  const dropZone = document.getElementById("mediaDropZone");
+  const fileInput = document.getElementById("mediaFileInput");
+  const selectedFiles = document.getElementById("mediaSelectedFiles");
+  function renderSelectedFiles() {{
+    if (!selectedFiles || !fileInput) return;
+    selectedFiles.innerHTML = "";
+    Array.from(fileInput.files || []).forEach((file) => {{
+      const item = document.createElement("li");
+      item.textContent = `${{file.name}} (${{Math.ceil(file.size / 1024)}} KB)`;
+      selectedFiles.appendChild(item);
+    }});
+  }}
+  if (dropZone && fileInput) {{
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", renderSelectedFiles);
+    ["dragenter", "dragover"].forEach((eventName) => {{
+      dropZone.addEventListener(eventName, (event) => {{
+        event.preventDefault();
+        dropZone.classList.add("dragging");
+      }});
+    }});
+    ["dragleave", "drop"].forEach((eventName) => {{
+      dropZone.addEventListener(eventName, (event) => {{
+        event.preventDefault();
+        dropZone.classList.remove("dragging");
+      }});
+    }});
+    dropZone.addEventListener("drop", (event) => {{
+      if (event.dataTransfer?.files?.length) {{
+        fileInput.files = event.dataTransfer.files;
+        renderSelectedFiles();
+      }}
+    }});
+  }}
 </script>
 </body>
 </html>"""

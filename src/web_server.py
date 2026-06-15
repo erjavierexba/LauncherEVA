@@ -278,6 +278,12 @@ async def config_apply_release(request):
     config_redirect()
 
 
+async def config_client_reset(request):
+    await api_client_reset(request)
+    LAUNCHER_STATE.log("Reset enviado a la aplicación cliente.")
+    config_redirect()
+
+
 async def config_start_eva(request):
     LAUNCHER_STATE.log("EVA ya está arrancada en este proceso.")
     config_redirect()
@@ -304,8 +310,12 @@ async def config_players_delete(request):
 
 async def config_media_upload(request):
     post = await request.post()
-    upload = post.get("file")
-    if upload is not None and getattr(upload, "filename", ""):
+    uploads = [
+        upload
+        for upload in post.getall("file", [])
+        if upload is not None and getattr(upload, "filename", "")
+    ]
+    for upload in uploads:
         suffix = Path(upload.filename).suffix
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
             shutil.copyfileobj(upload.file, temp)
@@ -314,7 +324,7 @@ async def config_media_upload(request):
             LAUNCHER_STATE.add_media_upload(
                 temp_path,
                 upload.filename,
-                str(post.get("name", "")),
+                str(post.get("name", "")) if len(uploads) == 1 else "",
                 str(post.get("aliases", "")),
             )
         finally:
@@ -1758,6 +1768,7 @@ async def start_web_server(context):
     app.router.add_post("/theme", config_theme)
     app.router.add_post("/theme/preset", config_theme_preset)
     app.router.add_post("/apply-release", config_apply_release)
+    app.router.add_post("/client/reset", config_client_reset)
     app.router.add_post("/start-eva", config_start_eva)
     app.router.add_post("/stop-eva", config_stop_eva)
     app.router.add_post("/players/add", config_players_add)

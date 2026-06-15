@@ -47,13 +47,23 @@
   <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal">
       <div class="modal-header">
-        <h2>Paneles visibles</h2>
+        <h2>Configuración</h2>
         <button id="closeSettingsButton" class="compact secondary">Cerrar</button>
       </div>
+      <div class="settings-block">
+        <h3>EVA</h3>
+        <div class="settings-actions">
+          <a class="secondary config-link" href="/config" target="_blank">Configurar EVA</a>
+          <button id="resetClientButton" class="secondary" type="button">Reset cliente</button>
+        </div>
+      </div>
+      <div class="settings-block">
+        <h3>Paneles visibles</h3>
       <div id="panelOptions" class="panel-options"></div>
       <div class="row" style="margin-top: 12px;">
         <button id="resetPanelsButton" class="secondary">Mostrar todos</button>
         <button id="savePanelsButton">Guardar</button>
+      </div>
       </div>
     </div>
   </div>
