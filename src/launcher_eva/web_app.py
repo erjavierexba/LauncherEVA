@@ -1017,10 +1017,11 @@ def render_page() -> str:
     .drop-status.error {{ color:var(--danger); }}
     .file-preview-grid {{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }}
     .file-preview {{ position:relative; overflow:hidden; min-height:198px; display:grid; grid-template-rows:118px auto; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
-    .file-preview-media {{ display:grid; place-items:center; min-width:0; min-height:0; background:#05070a; color:var(--muted); font-size:12px; font-weight:900; text-align:center; }}
+    .file-preview-media {{ position:relative; display:grid; place-items:center; min-width:0; min-height:0; background:#05070a; color:var(--muted); font-size:12px; font-weight:900; text-align:center; }}
+    .file-preview-media::after {{ content:""; position:absolute; inset:auto 0 0; height:58%; pointer-events:none; background:linear-gradient(180deg, rgba(5,7,10,0) 0%, rgba(5,7,10,.72) 68%, rgba(5,7,10,.96) 100%); }}
     .file-preview-media img, .file-preview-media video {{ width:100%; height:100%; object-fit:cover; display:block; }}
     .file-preview-media audio {{ width:calc(100% - 14px); }}
-    .file-preview-body {{ min-width:0; display:grid; gap:4px; padding:9px; }}
+    .file-preview-body {{ min-width:0; display:grid; gap:4px; padding:10px 9px 9px; background:linear-gradient(180deg, #121922 0%, #0c1016 42%); }}
     .file-preview-name {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:900; }}
     .file-preview-meta {{ color:var(--muted); font-size:12px; }}
     .file-preview-fields {{ display:grid; gap:7px; margin-top:4px; }}
