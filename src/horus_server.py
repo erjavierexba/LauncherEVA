@@ -36,13 +36,18 @@ HORUS_SW_PATH = HORUS_ROOT / "sw.js"
 def render_horus_html(context, ws_url: str) -> str:
     theme = context.config.data["theme"]
     assistant = context.config.data["assistant"]
+    project = context.config.data.get("project", {})
+    client_title = str(project.get("roleName") or theme.get("title") or assistant.get("name") or "EVA")
+    client_subtitle = str(project.get("appSubtitle") or assistant.get("name") or "EVA")
 
     return (
         HORUS_INDEX_PATH.read_text(encoding="utf-8")
         .replace("{{WS_URL}}", ws_url)
         .replace("{{SESSION_ID}}", str(context.session_id))
         .replace("{{HORUS_PORT}}", str(context.horus_port))
-        .replace("{{APP_TITLE}}", str(theme.get("title") or assistant.get("name") or "Horus"))
+        .replace("{{APP_TITLE}}", str(theme.get("title") or assistant.get("name") or "Cliente EVA"))
+        .replace("{{CLIENT_TITLE}}", client_title)
+        .replace("{{CLIENT_SUBTITLE}}", client_subtitle)
         .replace("{{THEME_JSON}}", json.dumps(theme, ensure_ascii=False))
     )
 
@@ -67,7 +72,27 @@ async def horus_js(request):
 
 
 async def horus_manifest(request):
-    return web.FileResponse(HORUS_MANIFEST_PATH, headers=no_store_headers())
+    context = request.app["context"]
+    project = context.config.data.get("project", {})
+    theme = context.config.data.get("theme", {})
+    name = str(project.get("roleName") or theme.get("title") or "EVA")
+    description = str(project.get("appSubtitle") or f"Cliente de jugador para {name}.")
+    manifest = {
+        "name": name,
+        "short_name": name[:12] or "EVA",
+        "description": description,
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": theme.get("background", "#0b0f14"),
+        "theme_color": theme.get("surfaceAlt", "#111923"),
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/favicon.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/favicon.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    }
+    return web.json_response(manifest, headers=no_store_headers())
 
 
 async def horus_service_worker(request):

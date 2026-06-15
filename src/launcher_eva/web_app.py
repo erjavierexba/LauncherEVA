@@ -182,7 +182,7 @@ def ensure_vendor_executable_bits(vendor_root: Path) -> None:
 
 def default_settings() -> dict:
     return {
-        "role_name": "Horus",
+        "role_name": "EVA",
         "app_subtitle": "EVA mantiene el vinculo abierto",
         "android_package": "com.eva.horus",
         "web_port": "8000",
@@ -779,7 +779,7 @@ class LauncherState:
         self.log("Música de intro actualizada: assets/music/despertar.mp3.")
 
     def role_name(self) -> str:
-        return self.settings.get("role_name", "").strip() or "Horus"
+        return self.settings.get("role_name", "").strip() or "EVA"
 
     def app_subtitle(self) -> str:
         return self.settings.get("app_subtitle", "").strip() or "EVA mantiene el vinculo abierto"
@@ -959,7 +959,7 @@ def render_page() -> str:
     users = STATE.users()
     media = STATE.media_items()
     settings = STATE.settings
-    role_name = settings.get("role_name", "Horus")
+    role_name = settings.get("role_name", "EVA")
     default_package = settings.get("android_package") or f"com.eva.{package_slug(role_name)}"
     eva_running = STATE.eva_process is not None and STATE.eva_process.poll() is None
     microphones = microphone_devices()

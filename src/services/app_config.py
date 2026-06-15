@@ -27,6 +27,10 @@ DEFAULT_CONFIG = {
         "radius": "8px",
     },
     "users": [],
+    "project": {
+        "roleName": "EVA",
+        "appSubtitle": "EVA mantiene el vinculo abierto",
+    },
     "server": {
         "host": "0.0.0.0",
         "evaPort": 8000,
@@ -68,6 +72,7 @@ class AppConfig:
             "assistant": self.data["assistant"],
             "theme": self.data["theme"],
             "users": self.users(),
+            "project": self.data["project"],
             "server": self.data["server"],
         }
 
@@ -156,6 +161,12 @@ def merge_config(data: dict):
 
     if isinstance(data.get("users"), list):
         merged["users"] = data["users"]
+
+    if isinstance(data.get("project"), dict):
+        project = data["project"]
+        for key in ("roleName", "appSubtitle"):
+            if isinstance(project.get(key), str) and project[key].strip():
+                merged["project"][key] = project[key].strip()
 
     if isinstance(data.get("server"), dict):
         server = data["server"]

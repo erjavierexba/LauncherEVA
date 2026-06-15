@@ -4,7 +4,7 @@
     "wakeWord": "eva"
   },
   "theme": {
-    "title": "Panel Horus",
+    "title": "Panel EVA",
     "background": "#0d0f12",
     "surface": "#1a1f27",
     "surfaceAlt": "#111419",
@@ -62,6 +62,10 @@
       ]
     }
   ],
+  "project": {
+    "roleName": "EVA",
+    "appSubtitle": "EVA mantiene el vinculo abierto"
+  },
   "server": {
     "host": "0.0.0.0",
     "evaPort": 8000,

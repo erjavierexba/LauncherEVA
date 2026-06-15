@@ -1,7 +1,7 @@
 {
-  "name": "Horus",
-  "short_name": "Horus",
-  "description": "Aplicación de jugador para Última Carta.",
+  "name": "Cliente EVA",
+  "short_name": "EVA",
+  "description": "Aplicación de jugador para EVA.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

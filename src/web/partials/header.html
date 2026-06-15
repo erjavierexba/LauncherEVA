@@ -1,7 +1,7 @@
 <header>
   <div class="brand-block">
-    <span class="brand-title">PANEL DE CONTROL EVA</span>
-    <span class="brand-subtitle">Última Carta</span>
+    <span class="brand-title">{{APP_TITLE}}</span>
+    <span class="brand-subtitle">{{ROLE_SUBTITLE}}</span>
   </div>
   <nav class="view-tabs" aria-label="Vistas del panel">
     <button class="view-tab active" type="button" data-panel-filter="all">Todo</button>
@@ -16,6 +16,7 @@
       <input id="checksNpcSwitch" type="checkbox" />
       <span>NPCs</span>
     </label>
+    <a class="secondary config-link" href="/config" target="_blank">Configurar EVA</a>
     <button id="resetClientButton" class="secondary" type="button">Reset cliente</button>
     <button id="openSettingsButton" class="icon-button secondary" title="Configurar paneles" aria-label="Configurar paneles">⚙</button>
   </div>

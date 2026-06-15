@@ -2,12 +2,15 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from aiohttp import web
+from launcher_eva.web_app import STATE as LAUNCHER_STATE
+from launcher_eva.web_app import render_page as render_launcher_page
 
 from src.commands.musica import MUSIC_MAP
 from src.domain.door_rules import evaluate_door
@@ -57,12 +60,16 @@ def render_html(context, ws_url: str) -> str:
     html = render_html_partial(HTML_PATH)
     theme = context.config.data["theme"]
     assistant = context.config.data["assistant"]
+    project = context.config.data.get("project", {})
+    app_title = str(theme.get("title") or assistant.get("name") or "EVA")
+    role_subtitle = str(project.get("roleName") or project.get("appSubtitle") or assistant.get("name") or "EVA")
 
     return (
         html
         .replace("{{WS_URL}}", ws_url)
         .replace("{{SESSION_ID}}", str(context.session_id))
-        .replace("{{APP_TITLE}}", str(theme.get("title") or assistant.get("name") or "EVA"))
+        .replace("{{APP_TITLE}}", app_title)
+        .replace("{{ROLE_SUBTITLE}}", role_subtitle)
         .replace("{{THEME_JSON}}", json.dumps(theme, ensure_ascii=False))
     )
 
@@ -207,6 +214,138 @@ async def scripts_js(request):
         content_type="application/javascript",
         headers=no_store_headers(),
     )
+
+
+async def config_index(request):
+    sync_launcher_settings(request.app["context"])
+    return web.Response(
+        text=render_launcher_page(),
+        content_type="text/html",
+        headers=no_store_headers(),
+    )
+
+
+async def config_logs(request):
+    return web.Response(
+        text="\n".join(LAUNCHER_STATE.logs),
+        content_type="text/plain",
+        headers=no_store_headers(),
+    )
+
+
+def config_redirect():
+    raise web.HTTPSeeOther("/config")
+
+
+def sync_launcher_settings(context):
+    project = context.config.data.get("project", {})
+    server = context.config.data.get("server", {})
+    if project.get("roleName"):
+        LAUNCHER_STATE.settings["role_name"] = str(project["roleName"])
+    if project.get("appSubtitle"):
+        LAUNCHER_STATE.settings["app_subtitle"] = str(project["appSubtitle"])
+    LAUNCHER_STATE.settings["web_port"] = str(server.get("evaPort", context.web_port))
+    LAUNCHER_STATE.settings["client_port"] = str(server.get("clientPort", context.horus_port))
+
+
+async def config_form(request):
+    post = await request.post()
+    return {key: str(value) for key, value in post.items() if isinstance(value, str)}
+
+
+async def config_settings(request):
+    LAUNCHER_STATE.save_settings(await config_form(request))
+    config_redirect()
+
+
+async def config_theme(request):
+    LAUNCHER_STATE.save_theme(await config_form(request))
+    request.app["context"].config.data = request.app["context"].config.load()
+    config_redirect()
+
+
+async def config_theme_preset(request):
+    form = await config_form(request)
+    LAUNCHER_STATE.apply_preset(form.get("preset", "eva"))
+    request.app["context"].config.data = request.app["context"].config.load()
+    config_redirect()
+
+
+async def config_apply_release(request):
+    LAUNCHER_STATE.apply_release_configuration()
+    request.app["context"].config.data = request.app["context"].config.load()
+    config_redirect()
+
+
+async def config_start_eva(request):
+    LAUNCHER_STATE.log("EVA ya está arrancada en este proceso.")
+    config_redirect()
+
+
+async def config_stop_eva(request):
+    LAUNCHER_STATE.log("Detén EVA con CTRL+C en la terminal donde se lanzó main.py.")
+    config_redirect()
+
+
+async def config_players_add(request):
+    form = await config_form(request)
+    LAUNCHER_STATE.upsert_user(form.get("name", ""), form.get("aliases", ""))
+    request.app["context"].config.data = request.app["context"].config.load()
+    config_redirect()
+
+
+async def config_players_delete(request):
+    form = await config_form(request)
+    LAUNCHER_STATE.delete_user(form.get("name", ""))
+    request.app["context"].config.data = request.app["context"].config.load()
+    config_redirect()
+
+
+async def config_media_upload(request):
+    post = await request.post()
+    upload = post.get("file")
+    if upload is not None and getattr(upload, "filename", ""):
+        suffix = Path(upload.filename).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+            shutil.copyfileobj(upload.file, temp)
+            temp_path = Path(temp.name)
+        try:
+            LAUNCHER_STATE.add_media_upload(
+                temp_path,
+                upload.filename,
+                str(post.get("name", "")),
+                str(post.get("aliases", "")),
+            )
+        finally:
+            temp_path.unlink(missing_ok=True)
+    config_redirect()
+
+
+async def config_media_delete(request):
+    form = await config_form(request)
+    LAUNCHER_STATE.delete_media(form.get("filename", ""))
+    config_redirect()
+
+
+async def config_jokes_add(request):
+    form = await config_form(request)
+    LAUNCHER_STATE.add_joke(form.get("name", ""), form.get("text", ""), form.get("aliases", ""))
+    config_redirect()
+
+
+async def config_intro_upload(request):
+    post = await request.post()
+    upload = post.get("file")
+    if upload is not None and getattr(upload, "filename", ""):
+        suffix = Path(upload.filename).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+            shutil.copyfileobj(upload.file, temp)
+            temp_path = Path(temp.name)
+        try:
+            LAUNCHER_STATE.set_intro_upload(temp_path, upload.filename)
+        finally:
+            temp_path.unlink(missing_ok=True)
+    config_redirect()
 
 
 async def login(request):
@@ -1042,7 +1181,7 @@ async def create_exchange_post(request):
     if len(participants) < 2 or not player_participants:
         return web.json_response({
             "ok": False,
-            "mensaje": "Elige al menos dos participantes y un jugador con Horus.",
+            "mensaje": "Elige al menos dos participantes y un jugador cliente.",
         }, status=400)
 
     close_active_exchange_posts(context, "replaced")
@@ -1612,6 +1751,20 @@ async def start_web_server(context):
     app.on_cleanup.append(stop_ws_loop)
 
     app.router.add_get("/", index)
+    app.router.add_get("/config", config_index)
+    app.router.add_get("/logs", config_logs)
+    app.router.add_post("/settings", config_settings)
+    app.router.add_post("/theme", config_theme)
+    app.router.add_post("/theme/preset", config_theme_preset)
+    app.router.add_post("/apply-release", config_apply_release)
+    app.router.add_post("/start-eva", config_start_eva)
+    app.router.add_post("/stop-eva", config_stop_eva)
+    app.router.add_post("/players/add", config_players_add)
+    app.router.add_post("/players/delete", config_players_delete)
+    app.router.add_post("/media/upload", config_media_upload)
+    app.router.add_post("/media/delete", config_media_delete)
+    app.router.add_post("/jokes/add", config_jokes_add)
+    app.router.add_post("/intro/upload", config_intro_upload)
     app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/api/config", api_config)
     app.router.add_post("/api/client/reset", api_client_reset)
