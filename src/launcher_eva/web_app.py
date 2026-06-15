@@ -1013,7 +1013,17 @@ def render_page() -> str:
     .drop-zone {{ min-height:138px; display:grid; place-items:center; gap:8px; padding:18px; border:1px dashed #52667d; border-radius:8px; background:#0c1016; color:var(--muted); text-align:center; cursor:pointer; transition:border-color .16s ease, background .16s ease, color .16s ease; }}
     .drop-zone strong {{ color:var(--text); font-size:15px; }}
     .drop-zone.dragging {{ border-color:var(--accent); background:#102333; color:var(--text); }}
-    .file-list {{ margin:0; padding-left:18px; color:var(--muted); font-size:12px; }}
+    .drop-status {{ margin:0; color:var(--muted); font-size:12px; font-weight:800; }}
+    .drop-status.error {{ color:var(--danger); }}
+    .file-preview-grid {{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }}
+    .file-preview {{ position:relative; overflow:hidden; min-height:198px; display:grid; grid-template-rows:118px auto; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
+    .file-preview-media {{ display:grid; place-items:center; min-width:0; min-height:0; background:#05070a; color:var(--muted); font-size:12px; font-weight:900; text-align:center; }}
+    .file-preview-media img, .file-preview-media video {{ width:100%; height:100%; object-fit:cover; display:block; }}
+    .file-preview-media audio {{ width:calc(100% - 14px); }}
+    .file-preview-body {{ min-width:0; display:grid; gap:4px; padding:9px; }}
+    .file-preview-name {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:900; }}
+    .file-preview-meta {{ color:var(--muted); font-size:12px; }}
+    .remove-file {{ position:absolute; top:7px; right:7px; width:30px; min-width:30px; min-height:30px; padding:0; border-color:#6d3b45; background:#3a151b; }}
     button, a.button {{ min-height:36px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #52667d; border-radius:6px; background:#1b2a38; color:var(--text); padding:8px 11px; text-decoration:none; font-weight:800; cursor:pointer; }}
     button.primary {{ background:#1f4f66; border-color:var(--accent); }}
     button:hover, a.button:hover {{ border-color:var(--accent); }}
@@ -1075,7 +1085,7 @@ def render_page() -> str:
 
     <section>
       <h2>Archivos</h2>
-      <form class="grid" method="post" action="/media/upload" enctype="multipart/form-data">
+      <form id="mediaUploadForm" class="grid" method="post" action="/media/upload" enctype="multipart/form-data">
         <label class="span2">Archivos
           <span id="mediaDropZone" class="drop-zone">
             <strong>Suelta archivos aquí</strong>
@@ -1086,7 +1096,8 @@ def render_page() -> str:
         </label>
         <label>Nombre visible<input name="name" placeholder="Opcional; se usa en subidas de un solo archivo"></label>
         <label class="span2">Alias separados por coma<input name="aliases"></label>
-        <ul id="mediaSelectedFiles" class="file-list"></ul>
+        <p id="mediaDropStatus" class="drop-status span2">Sin archivos seleccionados.</p>
+        <div id="mediaSelectedFiles" class="file-preview-grid"></div>
         <div class="actions span2"><button>Subir a media</button></div>
       </form>
       <table><thead><tr><th>Archivo</th><th>Tipo</th><th>Alias</th><th></th></tr></thead><tbody>{media_rows}</tbody></table>
@@ -1135,19 +1146,100 @@ def render_page() -> str:
   }});
   const dropZone = document.getElementById("mediaDropZone");
   const fileInput = document.getElementById("mediaFileInput");
+  const uploadForm = document.getElementById("mediaUploadForm");
+  const dropStatus = document.getElementById("mediaDropStatus");
   const selectedFiles = document.getElementById("mediaSelectedFiles");
+  let selectedMediaFiles = [];
+  let previewUrls = [];
+  function revokePreviewUrls() {{
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
+  }}
+  function formatBytes(bytes) {{
+    if (bytes < 1024) return `${{bytes}} B`;
+    if (bytes < 1024 * 1024) return `${{Math.ceil(bytes / 1024)}} KB`;
+    return `${{(bytes / (1024 * 1024)).toFixed(1)}} MB`;
+  }}
+  function escapeHtml(value) {{
+    return String(value).replace(/[&<>"']/g, (char) => ({{
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }}[char]));
+  }}
+  function syncFileInput() {{
+    if (!fileInput) return;
+    const transfer = new DataTransfer();
+    selectedMediaFiles.forEach((file) => transfer.items.add(file));
+    fileInput.files = transfer.files;
+  }}
+  function addFiles(files) {{
+    const existing = new Set(selectedMediaFiles.map((file) => `${{file.name}}:${{file.size}}:${{file.lastModified}}`));
+    Array.from(files || []).forEach((file) => {{
+      const key = `${{file.name}}:${{file.size}}:${{file.lastModified}}`;
+      if (!existing.has(key)) {{
+        selectedMediaFiles.push(file);
+        existing.add(key);
+      }}
+    }});
+    syncFileInput();
+    renderSelectedFiles();
+  }}
+  function removeFile(index) {{
+    selectedMediaFiles.splice(index, 1);
+    syncFileInput();
+    renderSelectedFiles();
+  }}
+  function previewFor(file) {{
+    const url = URL.createObjectURL(file);
+    previewUrls.push(url);
+    if (file.type.startsWith("image/")) {{
+      return `<img src="${{url}}" alt="">`;
+    }}
+    if (file.type.startsWith("video/")) {{
+      return `<video src="${{url}}" muted playsinline></video>`;
+    }}
+    if (file.type.startsWith("audio/")) {{
+      return `<audio src="${{url}}" controls></audio>`;
+    }}
+    if (file.type === "application/pdf") {{
+      return "PDF";
+    }}
+    if (file.type.startsWith("text/") || /\\.(md|txt|json)$/i.test(file.name)) {{
+      return "TEXTO";
+    }}
+    return escapeHtml(file.name.split(".").pop()?.toUpperCase() || "ARCHIVO");
+  }}
   function renderSelectedFiles() {{
-    if (!selectedFiles || !fileInput) return;
+    if (!selectedFiles || !dropStatus) return;
+    revokePreviewUrls();
     selectedFiles.innerHTML = "";
-    Array.from(fileInput.files || []).forEach((file) => {{
-      const item = document.createElement("li");
-      item.textContent = `${{file.name}} (${{Math.ceil(file.size / 1024)}} KB)`;
-      selectedFiles.appendChild(item);
+    dropStatus.classList.remove("error");
+    dropStatus.textContent = selectedMediaFiles.length
+      ? `${{selectedMediaFiles.length}} archivo(s) listos para subir.`
+      : "Sin archivos seleccionados.";
+    selectedMediaFiles.forEach((file, index) => {{
+      const card = document.createElement("div");
+      card.className = "file-preview";
+      const safeName = escapeHtml(file.name);
+      const safeType = escapeHtml(file.type || "archivo");
+      card.innerHTML = `
+        <div class="file-preview-media">${{previewFor(file)}}</div>
+        <div class="file-preview-body">
+          <div class="file-preview-name" title="${{safeName}}">${{safeName}}</div>
+          <div class="file-preview-meta">${{safeType}} · ${{formatBytes(file.size)}}</div>
+        </div>
+        <button class="remove-file" type="button" aria-label="Quitar ${{safeName}}">×</button>
+      `;
+      card.querySelector(".remove-file").addEventListener("click", () => removeFile(index));
+      selectedFiles.appendChild(card);
     }});
   }}
   if (dropZone && fileInput) {{
     dropZone.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", renderSelectedFiles);
+    fileInput.addEventListener("change", () => addFiles(fileInput.files));
     ["dragenter", "dragover"].forEach((eventName) => {{
       dropZone.addEventListener(eventName, (event) => {{
         event.preventDefault();
@@ -1162,8 +1254,14 @@ def render_page() -> str:
     }});
     dropZone.addEventListener("drop", (event) => {{
       if (event.dataTransfer?.files?.length) {{
-        fileInput.files = event.dataTransfer.files;
-        renderSelectedFiles();
+        addFiles(event.dataTransfer.files);
+      }}
+    }});
+    uploadForm?.addEventListener("submit", (event) => {{
+      if (!selectedMediaFiles.length) {{
+        event.preventDefault();
+        dropStatus.textContent = "Selecciona o suelta archivos primero.";
+        dropStatus.classList.add("error");
       }}
     }});
   }}
