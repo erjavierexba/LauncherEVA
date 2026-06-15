@@ -198,6 +198,11 @@
         page.key = page.key || templateKeyFromLabel(page.label || "pagina");
         page.label = page.label || page.key;
         page.sections = Array.isArray(page.sections) ? page.sections.filter((section) => section && typeof section === "object") : [];
+        for (const section of page.sections) {
+          section.key = section.key || templateKeyFromLabel(section.label || "seccion");
+          section.label = section.label || section.key;
+          section.fields = Array.isArray(section.fields) ? section.fields.filter(Boolean) : [];
+        }
       }
 
       return next;
@@ -526,6 +531,10 @@
       title.textContent = section.label || `Sección ${sectionIndex + 1}`;
       const actions = document.createElement("div");
       actions.className = "builder-panel-actions";
+      actions.append(
+        builderIconButton("↑", "Subir sección", () => moveSection(pageIndex, sectionIndex, -1)),
+        builderIconButton("↓", "Bajar sección", () => moveSection(pageIndex, sectionIndex, 1))
+      );
       const remove = builderIconButton("×", "Eliminar sección", () => {
         updateSchemaFromBuilder((schema) => {
           schema.pages[pageIndex].sections.splice(sectionIndex, 1);
@@ -618,7 +627,11 @@
         schema.pages.push({
           key: `pagina_${pageIndex}`,
           label: `Página ${pageIndex}`,
-          sections: [],
+          sections: [{
+            key: "principal",
+            label: "Principal",
+            fields: [],
+          }],
         });
       });
     }
@@ -632,6 +645,16 @@
           label: `Sección ${sections.length + 1}`,
           fields: [],
         });
+      });
+    }
+
+    function moveSection(pageIndex, sectionIndex, delta) {
+      updateSchemaFromBuilder((schema) => {
+        const sections = schema.pages[pageIndex]?.sections || [];
+        const nextIndex = sectionIndex + delta;
+        if (nextIndex < 0 || nextIndex >= sections.length) return;
+        const [item] = sections.splice(sectionIndex, 1);
+        sections.splice(nextIndex, 0, item);
       });
     }
 

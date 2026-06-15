@@ -677,9 +677,7 @@
 
       const sheetFields = personaje.sheet?.fields || [];
       if (sheetFields.length > 0) {
-        for (const field of sheetFields) {
-          characterDetailBody.appendChild(createStatBlock(field, personaje));
-        }
+        renderCharacterSheetSections(characterDetailBody, personaje);
       } else {
         const empty = document.createElement("div");
         empty.className = "empty-state";
@@ -689,6 +687,78 @@
 
       characterDetailModal.classList.add("open");
       characterDetailModal.setAttribute("aria-hidden", "false");
+    }
+
+    function renderCharacterSheetSections(container, personaje, activePageIndex = 0) {
+      const pages = characterSheetPages(personaje);
+      const selectedIndex = Math.max(0, Math.min(activePageIndex, pages.length - 1));
+
+      if (pages.length > 1) {
+        const tabs = document.createElement("div");
+        tabs.className = "sheet-page-tabs";
+        pages.forEach((page, index) => {
+          const tab = document.createElement("button");
+          tab.type = "button";
+          tab.className = index === selectedIndex ? "secondary active" : "secondary";
+          tab.textContent = page.label || page.key || `Página ${index + 1}`;
+          tab.addEventListener("click", () => {
+            container.querySelectorAll(".sheet-page-tabs, .sheet-sections").forEach((node) => node.remove());
+            renderCharacterSheetSections(container, personaje, index);
+          });
+          tabs.appendChild(tab);
+        });
+        container.appendChild(tabs);
+      }
+
+      const sectionsNode = document.createElement("div");
+      sectionsNode.className = "sheet-sections";
+      const fieldsByKey = new Map((personaje.sheet?.fields || []).map((field) => [field.key, field]));
+
+      for (const section of pages[selectedIndex].sections) {
+        const sectionNode = document.createElement("section");
+        sectionNode.className = "sheet-section";
+        const title = document.createElement("h3");
+        title.textContent = section.label || section.key || "Sección";
+        sectionNode.appendChild(title);
+
+        const grid = document.createElement("div");
+        grid.className = "stat-grid";
+        for (const key of section.fields || []) {
+          const field = fieldsByKey.get(key);
+          if (field) grid.appendChild(createStatBlock(field, personaje));
+        }
+        sectionNode.appendChild(grid);
+        sectionsNode.appendChild(sectionNode);
+      }
+
+      container.appendChild(sectionsNode);
+    }
+
+    function characterSheetPages(personaje) {
+      const fields = personaje.sheet?.fields || [];
+      const schemaPages = Array.isArray(personaje.sheet?.template?.schema?.pages) ? personaje.sheet.template.schema.pages : [];
+      const fieldKeys = new Set(fields.map((field) => field.key));
+      const pages = schemaPages
+        .map((page, pageIndex) => ({
+          key: page.key || `page_${pageIndex + 1}`,
+          label: page.label || page.key || `Página ${pageIndex + 1}`,
+          sections: (page.sections || [])
+            .map((section, sectionIndex) => ({
+              key: section.key || `section_${sectionIndex + 1}`,
+              label: section.label || section.key || `Sección ${sectionIndex + 1}`,
+              fields: (section.fields || []).filter((key) => fieldKeys.has(key)),
+            }))
+            .filter((section) => section.fields.length > 0),
+        }))
+        .filter((page) => page.sections.length > 0);
+
+      const usedKeys = new Set(pages.flatMap((page) => page.sections.flatMap((section) => section.fields)));
+      const looseFields = fields.map((field) => field.key).filter((key) => !usedKeys.has(key));
+      if (looseFields.length) {
+        pages.push({ key: "otros", label: "Otros", sections: [{ key: "otros", label: "Otros", fields: looseFields }] });
+      }
+
+      return pages.length ? pages : [{ key: "main", label: "Ficha", sections: [{ key: "main", label: "Ficha", fields: fields.map((field) => field.key) }] }];
     }
 
     function closeCharacterDetailModal() {

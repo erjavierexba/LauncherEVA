@@ -213,6 +213,44 @@
       gap: 8px;
     }
 
+    .sheet-page-tabs {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .sheet-page-tabs button {
+      flex: 0 0 auto;
+      min-height: 34px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .sheet-page-tabs button.active {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .sheet-sections {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 12px;
+    }
+
+    .sheet-section {
+      display: grid;
+      gap: 8px;
+    }
+
+    .sheet-section h3 {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
     .stat-block {
       min-width: 0;
       padding: 8px;

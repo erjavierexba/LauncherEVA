@@ -114,6 +114,35 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(field["config"]["formula"], "d20+level")
         self.assertTrue(field["favorite"])
 
+    def test_template_pages_and_sections_are_preserved(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        schema = {
+            "id": "sectioned",
+            "name": "Sectioned",
+            "fields": [
+                {"key": "name", "label": "Nombre", "type": "text"},
+                {"key": "hp", "label": "PG", "type": "number"},
+            ],
+            "pages": [
+                {
+                    "key": "front",
+                    "label": "Portada",
+                    "sections": [
+                        {"key": "identity", "label": "Identidad", "fields": ["name"]},
+                        {"key": "combat", "label": "Combate", "fields": ["hp"]},
+                    ],
+                },
+            ],
+        }
+
+        result = templates.create_template("sectioned", "Sectioned", schema)
+
+        self.assertTrue(result["ok"])
+        page = result["template"]["schema"]["pages"][0]
+        self.assertEqual(page["label"], "Portada")
+        self.assertEqual([section["key"] for section in page["sections"]], ["identity", "combat"])
+
 
 if __name__ == "__main__":
     unittest.main()

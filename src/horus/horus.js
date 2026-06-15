@@ -158,12 +158,12 @@ function renderSheet() {
   const items = [];
 
   if (sheet?.fields?.length) {
-    items.push({ title: username, id: null, fields: sheet.fields });
+    items.push({ title: username, id: null, fields: sheet.fields, schema: sheet.template?.schema || null });
   }
 
   for (const character of characters) {
     if (character.sheet?.fields?.length) {
-      items.push({ title: character.nombre, id: character.id, fields: character.sheet.fields });
+      items.push({ title: character.nombre, id: character.id, fields: character.sheet.fields, schema: character.sheet.template?.schema || null });
     }
   }
 
@@ -181,27 +181,95 @@ function renderSheet() {
     title.textContent = item.title;
     card.appendChild(title);
 
-    const fields = document.createElement("div");
-    fields.className = "field-grid";
-
-    for (const field of item.fields) {
-      const wrapper = document.createElement("div");
-      const label = document.createElement("label");
-      label.textContent = field.label;
-      if (isFormulaField(field)) {
-        wrapper.append(label, createFormulaRollButton(field, item));
-      } else {
-        const input = document.createElement(field.multiline ? "textarea" : "input");
-        input.value = field.value || "";
-        input.dataset.fieldKey = field.key;
-        wrapper.append(label, input);
-      }
-      fields.appendChild(wrapper);
-    }
-
-    card.appendChild(fields);
+    renderSheetPages(card, item);
     sheetList.appendChild(card);
   }
+}
+
+function renderSheetPages(card, item, activePageIndex = 0) {
+  const pages = sheetPages(item);
+  const selectedIndex = Math.max(0, Math.min(activePageIndex, pages.length - 1));
+
+  if (pages.length > 1) {
+    const tabs = document.createElement("div");
+    tabs.className = "sheet-page-tabs";
+    pages.forEach((page, index) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = index === selectedIndex ? "secondary active" : "secondary";
+      tab.textContent = page.label || page.key || `Página ${index + 1}`;
+      tab.addEventListener("click", () => {
+        card.querySelectorAll(".sheet-page-tabs, .sheet-sections").forEach((node) => node.remove());
+        renderSheetPages(card, item, index);
+      });
+      tabs.appendChild(tab);
+    });
+    card.appendChild(tabs);
+  }
+
+  const sectionsNode = document.createElement("div");
+  sectionsNode.className = "sheet-sections";
+  const fieldsByKey = new Map(item.fields.map((field) => [field.key, field]));
+
+  for (const section of pages[selectedIndex].sections) {
+    const sectionNode = document.createElement("section");
+    sectionNode.className = "sheet-section";
+    const title = document.createElement("h4");
+    title.textContent = section.label || section.key || "Sección";
+    sectionNode.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "field-grid";
+    for (const key of section.fields || []) {
+      const field = fieldsByKey.get(key);
+      if (field) grid.appendChild(createSheetFieldControl(field, item));
+    }
+    sectionNode.appendChild(grid);
+    sectionsNode.appendChild(sectionNode);
+  }
+
+  card.appendChild(sectionsNode);
+}
+
+function sheetPages(item) {
+  const schemaPages = Array.isArray(item.schema?.pages) ? item.schema.pages : [];
+  const fieldKeys = new Set(item.fields.map((field) => field.key));
+  const pages = schemaPages
+    .map((page, pageIndex) => ({
+      key: page.key || `page_${pageIndex + 1}`,
+      label: page.label || page.key || `Página ${pageIndex + 1}`,
+      sections: (page.sections || [])
+        .map((section, sectionIndex) => ({
+          key: section.key || `section_${sectionIndex + 1}`,
+          label: section.label || section.key || `Sección ${sectionIndex + 1}`,
+          fields: (section.fields || []).filter((key) => fieldKeys.has(key)),
+        }))
+        .filter((section) => section.fields.length > 0),
+    }))
+    .filter((page) => page.sections.length > 0);
+
+  const usedKeys = new Set(pages.flatMap((page) => page.sections.flatMap((section) => section.fields)));
+  const looseFields = item.fields.map((field) => field.key).filter((key) => !usedKeys.has(key));
+  if (looseFields.length) {
+    pages.push({ key: "otros", label: "Otros", sections: [{ key: "otros", label: "Otros", fields: looseFields }] });
+  }
+
+  return pages.length ? pages : [{ key: "main", label: "Ficha", sections: [{ key: "main", label: "Ficha", fields: item.fields.map((field) => field.key) }] }];
+}
+
+function createSheetFieldControl(field, item) {
+  const wrapper = document.createElement("div");
+  const label = document.createElement("label");
+  label.textContent = field.label;
+  if (isFormulaField(field)) {
+    wrapper.append(label, createFormulaRollButton(field, item));
+  } else {
+    const input = document.createElement(field.multiline ? "textarea" : "input");
+    input.value = field.value || "";
+    input.dataset.fieldKey = field.key;
+    wrapper.append(label, input);
+  }
+  return wrapper;
 }
 
 async function saveSheet() {
