@@ -1023,6 +1023,8 @@ def render_page() -> str:
     .file-preview-body {{ min-width:0; display:grid; gap:4px; padding:9px; }}
     .file-preview-name {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:900; }}
     .file-preview-meta {{ color:var(--muted); font-size:12px; }}
+    .file-preview-fields {{ display:grid; gap:7px; margin-top:4px; }}
+    .file-preview-fields input {{ min-height:32px; padding:7px 8px; font-size:13px; }}
     .remove-file {{ position:absolute; top:7px; right:7px; width:30px; min-width:30px; min-height:30px; padding:0; border-color:#6d3b45; background:#3a151b; }}
     button, a.button {{ min-height:36px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #52667d; border-radius:6px; background:#1b2a38; color:var(--text); padding:8px 11px; text-decoration:none; font-weight:800; cursor:pointer; }}
     button.primary {{ background:#1f4f66; border-color:var(--accent); }}
@@ -1094,8 +1096,6 @@ def render_page() -> str:
           </span>
           <input id="mediaFileInput" class="drop-input" type="file" name="file" multiple>
         </label>
-        <label>Nombre visible<input name="name" placeholder="Opcional; se usa en subidas de un solo archivo"></label>
-        <label class="span2">Alias separados por coma<input name="aliases"></label>
         <p id="mediaDropStatus" class="drop-status span2">Sin archivos seleccionados.</p>
         <div id="mediaSelectedFiles" class="file-preview-grid"></div>
         <div class="actions span2"><button>Subir a media</button></div>
@@ -1150,6 +1150,7 @@ def render_page() -> str:
   const dropStatus = document.getElementById("mediaDropStatus");
   const selectedFiles = document.getElementById("mediaSelectedFiles");
   let selectedMediaFiles = [];
+  let selectedMediaMeta = [];
   let previewUrls = [];
   function revokePreviewUrls() {{
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -1181,6 +1182,10 @@ def render_page() -> str:
       const key = `${{file.name}}:${{file.size}}:${{file.lastModified}}`;
       if (!existing.has(key)) {{
         selectedMediaFiles.push(file);
+        selectedMediaMeta.push({{
+          name: file.name.replace(/\\.[^.]+$/, "").replace(/[_-]+/g, " "),
+          aliases: "",
+        }});
         existing.add(key);
       }}
     }});
@@ -1189,6 +1194,7 @@ def render_page() -> str:
   }}
   function removeFile(index) {{
     selectedMediaFiles.splice(index, 1);
+    selectedMediaMeta.splice(index, 1);
     syncFileInput();
     renderSelectedFiles();
   }}
@@ -1225,14 +1231,25 @@ def render_page() -> str:
       card.className = "file-preview";
       const safeName = escapeHtml(file.name);
       const safeType = escapeHtml(file.type || "archivo");
+      const meta = selectedMediaMeta[index] || {{ name: "", aliases: "" }};
       card.innerHTML = `
         <div class="file-preview-media">${{previewFor(file)}}</div>
         <div class="file-preview-body">
           <div class="file-preview-name" title="${{safeName}}">${{safeName}}</div>
           <div class="file-preview-meta">${{safeType}} · ${{formatBytes(file.size)}}</div>
+          <div class="file-preview-fields">
+            <label>Nombre visible<input name="name_${{index}}" value="${{escapeHtml(meta.name)}}" placeholder="Nombre visible"></label>
+            <label>Aliases<input name="aliases_${{index}}" value="${{escapeHtml(meta.aliases)}}" placeholder="alias 1, alias 2"></label>
+          </div>
         </div>
         <button class="remove-file" type="button" aria-label="Quitar ${{safeName}}">×</button>
       `;
+      card.querySelector(`[name="name_${{index}}"]`).addEventListener("input", (event) => {{
+        selectedMediaMeta[index].name = event.target.value;
+      }});
+      card.querySelector(`[name="aliases_${{index}}"]`).addEventListener("input", (event) => {{
+        selectedMediaMeta[index].aliases = event.target.value;
+      }});
       card.querySelector(".remove-file").addEventListener("click", () => removeFile(index));
       selectedFiles.appendChild(card);
     }});

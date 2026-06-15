@@ -315,7 +315,7 @@ async def config_media_upload(request):
         for upload in post.getall("file", [])
         if upload is not None and getattr(upload, "filename", "")
     ]
-    for upload in uploads:
+    for index, upload in enumerate(uploads):
         suffix = Path(upload.filename).suffix
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
             shutil.copyfileobj(upload.file, temp)
@@ -324,8 +324,8 @@ async def config_media_upload(request):
             LAUNCHER_STATE.add_media_upload(
                 temp_path,
                 upload.filename,
-                str(post.get("name", "")) if len(uploads) == 1 else "",
-                str(post.get("aliases", "")),
+                str(post.get(f"name_{index}", "")),
+                str(post.get(f"aliases_{index}", "")),
             )
         finally:
             temp_path.unlink(missing_ok=True)
