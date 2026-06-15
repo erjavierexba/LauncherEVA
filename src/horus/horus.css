@@ -171,7 +171,7 @@ h2 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 6px;
   position: sticky;
   top: 0;
@@ -312,6 +312,37 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.formula-roll {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.formula-roll .dice-result {
+  min-height: 42px;
+}
+
+.roll-history {
+  display: grid;
+  gap: 6px;
+}
+
+.roll-history-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0f141b;
+}
+
+.roll-history-item span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .slot-index {

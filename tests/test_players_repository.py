@@ -95,6 +95,25 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertIsNotNone(players.get("Ale"))
         self.assertIsNone(players.get_character(created["personaje"]["id"]))
 
+    def test_formula_fields_keep_formula_and_favorite_flag(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        result = templates.create_template("test_rolls", "Test rolls", {
+            "id": "test_rolls",
+            "name": "Test rolls",
+            "fields": [
+                {"key": "level", "label": "Nivel", "type": "number", "default": 2},
+                {"key": "strike", "label": "Golpe", "type": "formula", "formula": "d20+level", "favorite": True},
+            ],
+            "pages": [],
+        })
+
+        self.assertTrue(result["ok"])
+        field = next(field for field in result["template"]["fields"] if field["key"] == "strike")
+        self.assertEqual(field["type"], "formula")
+        self.assertEqual(field["config"]["formula"], "d20+level")
+        self.assertTrue(field["favorite"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,6 +108,8 @@
           (nextValue) => updateCharacterField(personaje?.id, field.key, nextValue),
           (roll) => sendDiceRoll(personaje?.playerName || personaje?.username, personaje?.nombre, field, roll)
         ));
+      } else if (isFormulaField(field)) {
+        value.appendChild(createFormulaRollButton(field, personaje));
       } else if (field.type === "b_int") {
         value.appendChild(createButtonedInteger(
           field,
@@ -137,6 +139,10 @@
 
       if (isDiceThrowInteger(field.type)) {
         return createDiceThrowInteger(field, value);
+      }
+
+      if (isFormulaField(field)) {
+        return createFormulaRollButton({ ...field, value });
       }
 
       if (field.type === "b_int") {
@@ -429,6 +435,186 @@
       return match ? parseInt(match[1], 10) : 20;
     }
 
+    function isFormulaField(field) {
+      return field?.type === "formula" || Boolean(field?.config?.formula);
+    }
+
+    function createFormulaRollButton(field, personaje = null) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "formula-roll";
+      const output = document.createElement("div");
+      output.className = "formula-roll-output";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = "Lanzar";
+
+      const formula = field.config?.formula || field.value || field.defaultValue || "";
+      output.textContent = formula || "Sin fórmula";
+      button.disabled = !formula;
+
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        try {
+          const result = evaluateSheetFormula(formula, personaje?.sheet?.fields || activeTemplate?.fields || []);
+          output.textContent = `${result.total} · ${result.breakdown}`;
+          sendDiceRoll(personaje?.playerName || personaje?.username, personaje?.nombre, field, {
+            dice: result.diceLabel || "formula",
+            natural: result.natural ?? result.total,
+            modifier: result.modifier ?? 0,
+            total: result.total,
+            formula: result.formula,
+            breakdown: result.breakdown,
+          });
+        } catch (error) {
+          output.textContent = error instanceof Error ? error.message : String(error);
+        }
+      });
+
+      wrapper.append(button, output);
+      return wrapper;
+    }
+
+    function evaluateSheetFormula(rawFormula, fields) {
+      const values = Object.fromEntries((fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
+      return evaluateFormulaExpression(rawFormula, values);
+    }
+
+    function evaluateFormulaExpression(rawFormula, values = {}) {
+      const formula = String(rawFormula || "").trim();
+      if (!formula) throw new Error("Fórmula vacía.");
+
+      const normalized = formula.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
+      const tokens = tokenizeFormula(normalized, values);
+      const output = [];
+      const operators = [];
+      const precedence = { "+": 1, "-": 1, "*": 2, "/": 2 };
+
+      for (const token of tokens) {
+        if (token.type === "number") {
+          output.push(token);
+        } else if (token.type === "operator") {
+          while (operators.length && operators.at(-1).value !== "(" && precedence[operators.at(-1).value] >= precedence[token.value]) {
+            output.push(operators.pop());
+          }
+          operators.push(token);
+        } else if (token.value === "(") {
+          operators.push(token);
+        } else if (token.value === ")") {
+          while (operators.length && operators.at(-1).value !== "(") output.push(operators.pop());
+          if (!operators.length) throw new Error("Paréntesis inválidos.");
+          operators.pop();
+        }
+      }
+
+      while (operators.length) {
+        const operator = operators.pop();
+        if (operator.value === "(") throw new Error("Paréntesis inválidos.");
+        output.push(operator);
+      }
+
+      const stack = [];
+      const rolls = [];
+      for (const token of output) {
+        if (token.type === "number") {
+          stack.push(token.value);
+          if (token.roll) rolls.push(token.roll);
+          continue;
+        }
+        const right = stack.pop();
+        const left = stack.pop();
+        if (left === undefined || right === undefined) throw new Error("Fórmula inválida.");
+        if (token.value === "+") stack.push(left + right);
+        if (token.value === "-") stack.push(left - right);
+        if (token.value === "*") stack.push(left * right);
+        if (token.value === "/") stack.push(Math.trunc(left / right));
+      }
+
+      if (stack.length !== 1) throw new Error("Fórmula inválida.");
+      const total = stack[0];
+      return {
+        formula,
+        total,
+        natural: rolls.length === 1 ? rolls[0].total : null,
+        modifier: rolls.length === 1 ? total - rolls[0].total : 0,
+        diceLabel: rolls.map((roll) => roll.label).join("+"),
+        breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
+      };
+    }
+
+    function tokenizeFormula(formula, values) {
+      const tokens = [];
+      let index = 0;
+      let expectValue = true;
+
+      while (index < formula.length) {
+        const rest = formula.slice(index);
+        if (/^\s+/.test(rest)) {
+          index += rest.match(/^\s+/)[0].length;
+          continue;
+        }
+        if (/^[()]/.test(rest)) {
+          const value = rest[0];
+          tokens.push({ type: "paren", value });
+          index += 1;
+          expectValue = value !== ")";
+          continue;
+        }
+        if (/^[+\-*/]/.test(rest) && !(expectValue && /^[+-](?:\d|d)/i.test(rest))) {
+          tokens.push({ type: "operator", value: rest[0] });
+          index += 1;
+          expectValue = true;
+          continue;
+        }
+        const signed = expectValue ? "[+-]?" : "";
+        const diceMatch = rest.match(new RegExp(`^${signed}(?:(\\d*)d([1-9]\\d*))`, "i"));
+        if (diceMatch) {
+          const sign = diceMatch[0].startsWith("-") ? -1 : 1;
+          const count = parseInt(diceMatch[1] || "1", 10);
+          const faces = parseInt(diceMatch[2], 10);
+          if (count > 100 || faces > 10000) throw new Error("Demasiados dados.");
+          const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
+          const sum = rolls.reduce((total, roll) => total + roll, 0);
+          tokens.push({ type: "number", value: sign * sum, roll: { label: `${count}d${faces}`, rolls, total: sum } });
+          index += diceMatch[0].length;
+          expectValue = false;
+          continue;
+        }
+        const numberMatch = rest.match(new RegExp(`^${signed}\\d+`));
+        if (numberMatch) {
+          tokens.push({ type: "number", value: parseInt(numberMatch[0], 10) });
+          index += numberMatch[0].length;
+          expectValue = false;
+          continue;
+        }
+        const keyMatch = rest.match(/^[a-zA-Z_][\w-]*/);
+        if (keyMatch) {
+          const raw = values[keyMatch[0]];
+          const result = valueToFormulaNumber(raw);
+          tokens.push(result);
+          index += keyMatch[0].length;
+          expectValue = false;
+          continue;
+        }
+        throw new Error(`Token inválido: ${rest.slice(0, 8)}`);
+      }
+
+      return tokens;
+    }
+
+    function valueToFormulaNumber(value) {
+      const raw = String(value ?? "0").trim();
+      const dice = raw.match(/^(\d*)d([1-9]\d*)$/i);
+      if (dice) {
+        const count = parseInt(dice[1] || "1", 10);
+        const faces = parseInt(dice[2], 10);
+        const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
+        const total = rolls.reduce((sum, roll) => sum + roll, 0);
+        return { type: "number", value: total, roll: { label: `${count}d${faces}`, rolls, total } };
+      }
+      return { type: "number", value: parseInt(raw || "0", 10) || 0 };
+    }
+
     async function updateCharacterField(characterId, key, value) {
       if (!characterId) return;
 
@@ -471,6 +657,8 @@
           natural: roll.natural,
           modifier: roll.modifier,
           total: roll.total,
+          formula: roll.formula,
+          breakdown: roll.breakdown,
         }),
       });
     }

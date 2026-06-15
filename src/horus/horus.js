@@ -1,11 +1,13 @@
 const USER_STORAGE_KEY = "horus.username";
 const MEDIA_SESSION_KEY = "horus.mediaSessionId";
 const MEDIA_STORAGE_KEY = "horus.mediaItems";
+const ROLL_HISTORY_STORAGE_KEY = "horus.rollHistory";
 
 let username = localStorage.getItem(USER_STORAGE_KEY) || "";
 let sheet = null;
 let characters = [];
 let mediaItems = [];
+let rollHistory = [];
 let countdownTimer = null;
 let deferredInstallPrompt = null;
 let serviceWorkerRegistration = null;
@@ -26,6 +28,7 @@ const mediaBody = document.getElementById("mediaBody");
 const installButton = document.getElementById("installButton");
 const diceFormulaInput = document.getElementById("diceFormulaInput");
 const diceFormulaResult = document.getElementById("diceFormulaResult");
+const rollHistoryList = document.getElementById("rollHistoryList");
 
 function setStatus(message) {
   statusLine.textContent = message;
@@ -75,6 +78,25 @@ function saveMediaItems() {
   localStorage.setItem(MEDIA_STORAGE_KEY, JSON.stringify(mediaItems));
 }
 
+function rollHistoryKey() {
+  return `${ROLL_HISTORY_STORAGE_KEY}.${username || "anon"}`;
+}
+
+function loadRollHistory() {
+  rollHistory = readJson(rollHistoryKey(), []);
+  renderRollHistory();
+}
+
+function saveRollHistory() {
+  localStorage.setItem(rollHistoryKey(), JSON.stringify(rollHistory));
+}
+
+function addRollHistory(entry) {
+  rollHistory = [{ ...entry, at: new Date().toISOString() }, ...rollHistory].slice(0, 200);
+  saveRollHistory();
+  renderRollHistory();
+}
+
 function showLogin() {
   loginView.hidden = false;
   appView.hidden = true;
@@ -85,6 +107,7 @@ function showApp() {
   loginView.hidden = true;
   appView.hidden = false;
   playerName.textContent = username;
+  loadRollHistory();
 }
 
 async function login(name) {
@@ -127,6 +150,7 @@ async function getServiceWorkerRegistration() {
 function renderAll() {
   renderSheet();
   renderMedia();
+  renderRollHistory();
 }
 
 function renderSheet() {
@@ -164,10 +188,14 @@ function renderSheet() {
       const wrapper = document.createElement("div");
       const label = document.createElement("label");
       label.textContent = field.label;
-      const input = document.createElement(field.multiline ? "textarea" : "input");
-      input.value = field.value || "";
-      input.dataset.fieldKey = field.key;
-      wrapper.append(label, input);
+      if (isFormulaField(field)) {
+        wrapper.append(label, createFormulaRollButton(field, item));
+      } else {
+        const input = document.createElement(field.multiline ? "textarea" : "input");
+        input.value = field.value || "";
+        input.dataset.fieldKey = field.key;
+        wrapper.append(label, input);
+      }
       fields.appendChild(wrapper);
     }
 
@@ -493,68 +521,235 @@ function empty(text) {
   return element;
 }
 
+function isFormulaField(field) {
+  return field?.type === "formula" || Boolean(field?.config?.formula);
+}
+
+function createFormulaRollButton(field, item) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "formula-roll";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = "Lanzar";
+  const result = document.createElement("div");
+  result.className = "dice-result";
+
+  const formula = field.config?.formula || field.value || field.defaultValue || "";
+  result.textContent = formula || "Sin fórmula";
+  button.disabled = !formula;
+
+  button.addEventListener("click", async () => {
+    try {
+      const roll = evaluateSheetFormula(formula, item.fields || []);
+      result.innerHTML = `${roll.total}<span class="dice-breakdown">${roll.breakdown}</span>`;
+      addRollHistory({
+        title: `${item.title} · ${field.label}`,
+        total: roll.total,
+        formula: roll.formula,
+        breakdown: roll.breakdown,
+      });
+      await sendRollToEva(item.title, field.label, roll);
+    } catch (error) {
+      result.textContent = error instanceof Error ? error.message : String(error);
+    }
+  });
+
+  wrapper.append(button, result);
+  return wrapper;
+}
+
+function evaluateSheetFormula(rawFormula, fields) {
+  const values = Object.fromEntries((fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
+  return evaluateFormulaExpression(rawFormula, values);
+}
+
 function rollFormula(rawFormula) {
-  const formula = String(rawFormula || "").replace(/\s+/g, "").toLowerCase();
-  if (!formula) {
-    throw new Error("Escribe una fórmula.");
-  }
+  return evaluateFormulaExpression(rawFormula, {});
+}
 
-  const tokenPattern = /([+-]?)(?:(\d*)d([1-9]\d*)|(\d+))/g;
-  const terms = [];
-  let cursor = 0;
-  let match = tokenPattern.exec(formula);
+function evaluateFormulaExpression(rawFormula, values = {}) {
+  const formula = String(rawFormula || "").trim();
+  if (!formula) throw new Error("Escribe una fórmula.");
 
-  while (match) {
-    if (match.index !== cursor) {
-      throw new Error("Fórmula inválida.");
-    }
+  const normalized = formula.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
+  const tokens = tokenizeFormula(normalized, values);
+  const output = [];
+  const operators = [];
+  const precedence = { "+": 1, "-": 1, "*": 2, "/": 2 };
 
-    const sign = match[1] === "-" ? -1 : 1;
-    if (match[3]) {
-      const count = match[2] ? Number.parseInt(match[2], 10) : 1;
-      const faces = Number.parseInt(match[3], 10);
-      if (count <= 0 || count > 100 || faces <= 0 || faces > 10000) {
-        throw new Error("Demasiados dados.");
+  for (const token of tokens) {
+    if (token.type === "number") {
+      output.push(token);
+    } else if (token.type === "operator") {
+      while (operators.length && operators.at(-1).value !== "(" && precedence[operators.at(-1).value] >= precedence[token.value]) {
+        output.push(operators.pop());
       }
-      const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
-      const total = sign * rolls.reduce((sum, roll) => sum + roll, 0);
-      terms.push({ kind: "dice", sign, count, faces, rolls, total });
-    } else {
-      const value = Number.parseInt(match[4], 10);
-      terms.push({ kind: "modifier", sign, value, total: sign * value });
+      operators.push(token);
+    } else if (token.value === "(") {
+      operators.push(token);
+    } else if (token.value === ")") {
+      while (operators.length && operators.at(-1).value !== "(") output.push(operators.pop());
+      if (!operators.length) throw new Error("Paréntesis inválidos.");
+      operators.pop();
     }
-
-    cursor = tokenPattern.lastIndex;
-    match = tokenPattern.exec(formula);
   }
 
-  if (cursor !== formula.length || terms.length === 0) {
-    throw new Error("Fórmula inválida.");
+  while (operators.length) {
+    const operator = operators.pop();
+    if (operator.value === "(") throw new Error("Paréntesis inválidos.");
+    output.push(operator);
   }
 
+  const stack = [];
+  const rolls = [];
+  for (const token of output) {
+    if (token.type === "number") {
+      stack.push(token.value);
+      if (token.roll) rolls.push(token.roll);
+      continue;
+    }
+    const right = stack.pop();
+    const left = stack.pop();
+    if (left === undefined || right === undefined) throw new Error("Fórmula inválida.");
+    if (token.value === "+") stack.push(left + right);
+    if (token.value === "-") stack.push(left - right);
+    if (token.value === "*") stack.push(left * right);
+    if (token.value === "/") stack.push(Math.trunc(left / right));
+  }
+
+  if (stack.length !== 1) throw new Error("Fórmula inválida.");
+  const total = stack[0];
   return {
     formula,
-    terms,
-    total: terms.reduce((sum, term) => sum + term.total, 0),
+    total,
+    natural: rolls.length === 1 ? rolls[0].total : total,
+    modifier: rolls.length === 1 ? total - rolls[0].total : 0,
+    diceLabel: rolls.map((roll) => roll.label).join("+") || "formula",
+    breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
   };
 }
 
-function formatRollBreakdown(result) {
-  return result.terms
-    .map((term, index) => {
-      const prefix = term.sign < 0 ? "-" : index === 0 ? "" : "+";
-      if (term.kind === "dice") {
-        return `${prefix}${term.count}d${term.faces}[${term.rolls.join(",")}]`;
-      }
-      return `${prefix}${term.value}`;
-    })
-    .join(" ");
+function tokenizeFormula(formula, values) {
+  const tokens = [];
+  let index = 0;
+  let expectValue = true;
+
+  while (index < formula.length) {
+    const rest = formula.slice(index);
+    if (/^\s+/.test(rest)) {
+      index += rest.match(/^\s+/)[0].length;
+      continue;
+    }
+    if (/^[()]/.test(rest)) {
+      const value = rest[0];
+      tokens.push({ type: "paren", value });
+      index += 1;
+      expectValue = value !== ")";
+      continue;
+    }
+    if (/^[+\-*/]/.test(rest) && !(expectValue && /^[+-](?:\d|d)/i.test(rest))) {
+      tokens.push({ type: "operator", value: rest[0] });
+      index += 1;
+      expectValue = true;
+      continue;
+    }
+    const signed = expectValue ? "[+-]?" : "";
+    const diceMatch = rest.match(new RegExp(`^${signed}(?:(\\d*)d([1-9]\\d*))`, "i"));
+    if (diceMatch) {
+      const sign = diceMatch[0].startsWith("-") ? -1 : 1;
+      const count = parseInt(diceMatch[1] || "1", 10);
+      const faces = parseInt(diceMatch[2], 10);
+      if (count > 100 || faces > 10000) throw new Error("Demasiados dados.");
+      const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
+      const sum = rolls.reduce((total, roll) => total + roll, 0);
+      tokens.push({ type: "number", value: sign * sum, roll: { label: `${count}d${faces}`, rolls, total: sum } });
+      index += diceMatch[0].length;
+      expectValue = false;
+      continue;
+    }
+    const numberMatch = rest.match(new RegExp(`^${signed}\\d+`));
+    if (numberMatch) {
+      tokens.push({ type: "number", value: parseInt(numberMatch[0], 10) });
+      index += numberMatch[0].length;
+      expectValue = false;
+      continue;
+    }
+    const keyMatch = rest.match(/^[a-zA-Z_][\w-]*/);
+    if (keyMatch) {
+      tokens.push(valueToFormulaNumber(values[keyMatch[0]]));
+      index += keyMatch[0].length;
+      expectValue = false;
+      continue;
+    }
+    throw new Error(`Token inválido: ${rest.slice(0, 8)}`);
+  }
+
+  return tokens;
+}
+
+function valueToFormulaNumber(value) {
+  const raw = String(value ?? "0").trim();
+  const dice = raw.match(/^(\d*)d([1-9]\d*)$/i);
+  if (dice) {
+    const count = parseInt(dice[1] || "1", 10);
+    const faces = parseInt(dice[2], 10);
+    const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * faces) + 1);
+    const total = rolls.reduce((sum, roll) => sum + roll, 0);
+    return { type: "number", value: total, roll: { label: `${count}d${faces}`, rolls, total } };
+  }
+  return { type: "number", value: parseInt(raw || "0", 10) || 0 };
+}
+
+async function sendRollToEva(characterName, fieldLabel, roll) {
+  await api("/api/dice-rolls", {
+    method: "POST",
+    body: JSON.stringify({
+      username,
+      characterName,
+      fieldLabel,
+      dice: roll.diceLabel || "formula",
+      natural: roll.natural ?? roll.total,
+      modifier: roll.modifier ?? 0,
+      total: roll.total,
+      formula: roll.formula,
+      breakdown: roll.breakdown,
+    }),
+  });
+}
+
+function renderRollHistory() {
+  if (!rollHistoryList) return;
+  rollHistoryList.innerHTML = "";
+  if (!rollHistory.length) {
+    rollHistoryList.appendChild(empty("Sin tiradas registradas."));
+    return;
+  }
+  for (const item of rollHistory) {
+    const row = document.createElement("div");
+    row.className = "roll-history-item";
+    const title = document.createElement("strong");
+    title.textContent = `${item.total} · ${item.title || "Tirada"}`;
+    const detail = document.createElement("span");
+    detail.textContent = item.breakdown || item.formula || "";
+    row.append(title, detail);
+    rollHistoryList.appendChild(row);
+  }
 }
 
 function handleFormulaRoll() {
   try {
     const result = rollFormula(diceFormulaInput.value);
-    diceFormulaResult.innerHTML = `${result.total}<span class="dice-breakdown">${result.formula} · ${formatRollBreakdown(result)}</span>`;
+    diceFormulaResult.innerHTML = `${result.total}<span class="dice-breakdown">${result.breakdown}</span>`;
+    addRollHistory({
+      title: "Dados",
+      total: result.total,
+      formula: result.formula,
+      breakdown: result.breakdown,
+    });
+    sendRollToEva(username, "Dados", result).catch((error) => {
+      setStatus(error instanceof Error ? error.message : String(error));
+    });
   } catch (error) {
     diceFormulaResult.textContent = error instanceof Error ? error.message : String(error);
   }

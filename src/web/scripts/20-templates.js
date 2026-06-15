@@ -78,7 +78,7 @@
       const label = labeledInput("Etiqueta", field.label || "");
       const type = labeledSelect(
         "Tipo",
-        ["text", "int", "b_int", "throw", "cycle", "array", "d4_throw_int", "d6_throw_int", "d8_throw_int", "d10_throw_int", "d12_throw_int", "d20_throw_int"],
+        ["text", "int", "b_int", "formula", "throw", "cycle", "array", "d4_throw_int", "d6_throw_int", "d8_throw_int", "d10_throw_int", "d12_throw_int", "d20_throw_int"],
         field.type || "text"
       );
       const defaultValue = labeledInput("Default", field.defaultValue || "");
@@ -813,6 +813,10 @@
       return [...templateFieldsEditor.querySelectorAll(".field-editor")].map((row, index) => {
         const inputs = row.querySelectorAll("input");
         const select = row.querySelector("select");
+        const config = parseArrayConfig(inputs[4].value);
+        if (select.value === "formula") {
+          config.formula = inputs[2].value;
+        }
 
         return {
           key: inputs[0].value,
@@ -820,7 +824,7 @@
           type: select.value,
           defaultValue: inputs[2].value,
           group: inputs[3].value,
-          config: parseArrayConfig(inputs[4].value),
+          config,
           favorite: inputs[5].checked,
           sortOrder: (index + 1) * 10,
         };
@@ -943,6 +947,12 @@
           schemaField.formula = field.defaultValue || "1d20";
         }
 
+        if (field.type === "formula") {
+          schemaField.type = "formula";
+          schemaField.formula = field.config?.formula || field.defaultValue || "";
+          schemaField.default = field.defaultValue || "";
+        }
+
         return schemaField;
       });
 
@@ -980,8 +990,10 @@
 
       return fields.map((field, index) => {
         let type = "text";
-        if (field.type === "number" || field.type === "formula") {
+        if (field.type === "number") {
           type = field.display === "counter" ? "b_int" : "int";
+        } else if (field.type === "formula") {
+          type = "formula";
         } else if (field.type === "array") {
           type = "array";
         } else if (field.type === "roll") {
@@ -1011,6 +1023,7 @@
               defaultValue: itemField.default ?? itemField.value ?? "",
               sortOrder: (itemIndex + 1) * 10,
             })),
+            formula: field.formula || "",
           },
           sortOrder: (index + 1) * 10,
         };

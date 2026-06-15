@@ -623,7 +623,9 @@ async def api_dice_roll_create(request):
     character_name = str(body.get("characterName", "")).strip()
     field_label = str(body.get("fieldLabel", "")).strip() or "tirada"
     dice = str(body.get("dice", "")).strip() or "d20"
-    natural = parse_positive_int(body.get("natural"))
+    formula = str(body.get("formula", "")).strip()
+    breakdown = str(body.get("breakdown", "")).strip()
+    natural = parse_int(body.get("natural"))
     modifier = parse_int(body.get("modifier"))
     total = parse_int(body.get("total"))
 
@@ -635,7 +637,7 @@ async def api_dice_roll_create(request):
 
     actor = f"{username}-{character_name}" if character_name and character_name != username else username
     modifier_label = f"+{modifier}" if modifier >= 0 else str(modifier)
-    formula = f"{dice}{modifier_label}"
+    formula = formula or f"{dice}{modifier_label}"
     max_roll = parse_positive_int(str(dice).lower().removeprefix("d"))
     suffix = ""
 
@@ -646,7 +648,7 @@ async def api_dice_roll_create(request):
 
     mensaje = (
         f"{actor} ha lanzado una tirada de {field_label} "
-        f"({formula}): {natural}{modifier_label}:{total}{suffix}"
+        f"({formula}): {breakdown or f'{natural}{modifier_label}'}:{total}{suffix}"
     )
     action = {
         "tipo": "DICE_ROLL",
@@ -658,6 +660,7 @@ async def api_dice_roll_create(request):
             "fieldLabel": field_label,
             "dice": dice,
             "formula": formula,
+            "breakdown": breakdown,
             "natural": natural,
             "modifier": modifier,
             "total": total,

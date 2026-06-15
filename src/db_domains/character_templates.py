@@ -3,7 +3,7 @@ import re
 
 
 class CharacterTemplatesRepository:
-    FIELD_TYPES = {"text", "int", "b_int", "throw", "array", "cycle"}
+    FIELD_TYPES = {"text", "int", "b_int", "throw", "formula", "array", "cycle"}
     BASIC_CHARACTER_SCHEMA = {
         "id": "personaje_basico",
         "name": "Personaje básico",
@@ -351,7 +351,10 @@ class CharacterTemplatesRepository:
                     "sortOrder": (item_index + 1) * 10,
                 })
 
-            config = self._serialize_config({"itemFields": item_fields})
+            config = self._serialize_config({
+                "itemFields": item_fields,
+                "formula": field.get("formula", ""),
+            })
             default_value = field.get("default", "[]" if field_type == "array" else "")
 
             self.conn.execute(
@@ -387,6 +390,9 @@ class CharacterTemplatesRepository:
 
         if field_type == "number":
             return "b_int" if field.get("display") == "counter" else "int"
+
+        if field_type == "formula":
+            return "formula"
 
         if field_type == "roll":
             return "throw"
@@ -572,6 +578,8 @@ class CharacterTemplatesRepository:
                 """,
                 (key, label, schema_json),
             )
+            if schema:
+                self._ensure_schema_fields(cursor.lastrowid, schema)
             self.conn.commit()
         except Exception:
             return {
@@ -598,6 +606,12 @@ class CharacterTemplatesRepository:
             return created
 
         new_template_id = created["template"]["id"]
+        if created["template"]["fields"]:
+            return {
+                "ok": True,
+                "template": self.get_template(new_template_id),
+            }
+
         for field in template["fields"]:
             self.conn.execute(
                 """
@@ -989,6 +1003,7 @@ class CharacterTemplatesRepository:
             config = {}
 
         item_fields = []
+        formula = str(config.get("formula", "")).strip()
 
         for index, field in enumerate(config.get("itemFields") or []):
             if not isinstance(field, dict):
@@ -1008,7 +1023,7 @@ class CharacterTemplatesRepository:
                 "sortOrder": self._to_int(field.get("sortOrder"), (index + 1) * 10),
             })
 
-        return json.dumps({"itemFields": item_fields}, ensure_ascii=False)
+        return json.dumps({"itemFields": item_fields, "formula": formula}, ensure_ascii=False)
 
     def _parse_config(self, raw_config):
         try:
@@ -1024,6 +1039,7 @@ class CharacterTemplatesRepository:
             item_fields = []
 
         return {
+            "formula": str(config.get("formula", "")),
             "itemFields": [
                 {
                     "key": str(field.get("key", "")),
