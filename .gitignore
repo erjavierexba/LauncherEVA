@@ -8,13 +8,15 @@ build/
 /launcher.config.json
 /firebase/
 /managed_releases/
-/assets/
 /apks/
 /vendor/
 /.android/
 /.gradle/
 /eva.sqlite3
 *.sqlite3
+*.sqlite3.backup-*
+/vosk-model-*/
+/*.zip
 
 projects/**/.git/
 projects/**/.venv/

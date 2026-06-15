@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111923" />
+  <title>Horus</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/horus.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section id="loginView" class="login-view">
+      <div class="brand">
+        <span class="brand-kicker">Última Carta</span>
+        <h1>Horus</h1>
+      </div>
+      <form id="loginForm" class="login-form">
+        <label for="usernameInput">Jugador</label>
+        <input id="usernameInput" autocomplete="username" placeholder="Tu nombre" />
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="loginStatus" class="status-text">Conecta con EVA en este dispositivo.</p>
+    </section>
+
+    <section id="appView" class="app-view" hidden>
+      <header class="topbar">
+        <div>
+          <span class="brand-kicker">Horus</span>
+          <h1 id="playerName">Jugador</h1>
+        </div>
+        <div class="topbar-actions">
+          <button id="installButton" class="icon-button" type="button" hidden title="Instalar">+</button>
+          <button id="refreshButton" class="icon-button" type="button" title="Refrescar">↻</button>
+          <button id="logoutButton" class="icon-button danger" type="button" title="Salir">×</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Vistas">
+        <button class="tab active" type="button" data-view="cards">Cartas</button>
+        <button class="tab" type="button" data-view="sheet">Ficha</button>
+        <button class="tab" type="button" data-view="scene">Escena</button>
+      </nav>
+
+      <div id="statusLine" class="status-line">Listo.</div>
+
+      <section id="cardsView" class="view active">
+        <div class="section-header">
+          <h2>Mano</h2>
+          <span id="cardCount" class="counter">0</span>
+        </div>
+        <div id="cardsList" class="cards-grid"></div>
+      </section>
+
+      <section id="sheetView" class="view">
+        <div class="section-header">
+          <h2>Ficha</h2>
+          <button id="saveSheetButton" class="secondary" type="button">Guardar</button>
+        </div>
+        <div id="sheetList" class="sheet-list"></div>
+      </section>
+
+      <section id="sceneView" class="view">
+        <div id="countdownPanel" class="panel" hidden></div>
+        <div id="doorPanel" class="panel" hidden></div>
+        <div id="exchangePanel" class="panel" hidden></div>
+        <div class="section-header">
+          <h2>Archivos</h2>
+          <button id="clearMediaButton" class="secondary" type="button">Limpiar</button>
+        </div>
+        <div id="mediaList" class="media-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="mediaDialog" class="media-dialog">
+    <div class="dialog-header">
+      <h2 id="mediaTitle">Archivo</h2>
+      <button id="closeMediaButton" class="icon-button" type="button">×</button>
+    </div>
+    <div id="mediaBody" class="media-body"></div>
+  </dialog>
+
+  <script>
+    window.HORUS_WS_URL = "{{WS_URL}}";
+    window.HORUS_SESSION_ID = "{{SESSION_ID}}";
+    window.HORUS_PORT = "{{HORUS_PORT}}";
+  </script>
+  <script src="/horus.js"></script>
+</body>
+</html>

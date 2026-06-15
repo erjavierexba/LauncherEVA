@@ -26,8 +26,6 @@ def main() -> None:
         return
 
     server, url = create_server()
-    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
 
     try:
         from PySide6.QtCore import QUrl
@@ -42,6 +40,9 @@ def main() -> None:
         finally:
             shutdown_server(server)
         return
+
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
 
     app = QApplication(sys.argv)
     window = QMainWindow()

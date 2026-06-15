@@ -1,0 +1,70 @@
+{
+  "assistant": {
+    "name": "EVA",
+    "wakeWord": "eva"
+  },
+  "theme": {
+    "title": "Panel Horus",
+    "background": "#0d0f12",
+    "surface": "#1a1f27",
+    "surfaceAlt": "#111419",
+    "text": "#ededed",
+    "muted": "#9fa7b3",
+    "accent": "#c9a24a",
+    "primary": "#66ccff",
+    "danger": "#c65353",
+    "radius": "8px"
+  },
+  "users": [
+    {
+      "name": "Ale",
+      "aliases": [
+        "ale",
+        "alex"
+      ]
+    },
+    {
+      "name": "Jordy",
+      "aliases": [
+        "jordy",
+        "jordi",
+        "yordi"
+      ]
+    },
+    {
+      "name": "Christian",
+      "aliases": [
+        "christian",
+        "cristian",
+        "cris",
+        "chris"
+      ]
+    },
+    {
+      "name": "Jose",
+      "aliases": [
+        "jose"
+      ]
+    },
+    {
+      "name": "Fran",
+      "aliases": [
+        "fran",
+        "frank"
+      ]
+    },
+    {
+      "name": "Pablo",
+      "aliases": [
+        "pablito",
+        "pabloski",
+        "pablo"
+      ]
+    }
+  ],
+  "server": {
+    "host": "0.0.0.0",
+    "evaPort": 8000,
+    "clientPort": 8080
+  }
+}

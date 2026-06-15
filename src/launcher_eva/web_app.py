@@ -127,15 +127,24 @@ def bundled_root() -> Path:
 
 
 def seed_bundled_projects() -> None:
-    source = bundled_root() / "projects"
-    destination = app_root() / "projects"
-    if not getattr(sys, "frozen", False) or not source.exists() or destination.exists():
+    if not getattr(sys, "frozen", False):
         return
-    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
-        ".git",
-        "__pycache__",
-        "*.pyc",
-    ))
+    source_root = bundled_root()
+    destination_root = app_root()
+    for directory in ("src", "config", "media", "assets"):
+        source = source_root / directory
+        destination = destination_root / directory
+        if source.exists() and not destination.exists():
+            shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
+                ".git",
+                "__pycache__",
+                "*.pyc",
+            ))
+    for filename in ("main.py", "requirements.txt", "Eva_icon.png"):
+        source = source_root / filename
+        destination = destination_root / filename
+        if source.exists() and not destination.exists():
+            shutil.copyfile(source, destination)
 
 
 def seed_bundled_vendor() -> None:
@@ -172,20 +181,12 @@ def ensure_vendor_executable_bits(vendor_root: Path) -> None:
 
 
 def default_settings() -> dict:
-    projects_root = app_root() / "projects"
     return {
         "role_name": "Horus",
         "app_subtitle": "EVA mantiene el vinculo abierto",
         "android_package": "com.eva.horus",
-        "firebase_service_account_path": "",
-        "google_services_path": "",
-        "firebase_web_config_path": "",
-        "eva_path": str(projects_root / "Asistente EVA"),
-        "horus_path": str(projects_root / "horus"),
-        "eva_remote": "",
-        "horus_remote": "",
-        "web_port": "8080",
-        "horus_port": "8081",
+        "web_port": "8000",
+        "client_port": "8080",
         "microphone_device": "",
     }
 
@@ -313,26 +314,6 @@ def microphone_devices() -> list[dict[str, str]]:
     return items
 
 
-def parse_firebase_web_file(path: Path) -> dict:
-    data = load_json(path, {})
-    if not isinstance(data, dict):
-        return {}
-
-    public = data.get("public")
-    private = data.get("private")
-    firebase_config = data.get("firebaseConfig") or data.get("config")
-
-    if isinstance(public, dict):
-        firebase_config = public.get("firebaseConfig") or public.get("config") or firebase_config
-        public = public.get("vapidPublicKey") or public.get("publicKey")
-
-    return {
-        "vapidPublicKey": str(public or "").strip(),
-        "vapidPrivateKey": str(private or "").strip(),
-        "firebaseConfig": firebase_config if isinstance(firebase_config, dict) else {},
-    }
-
-
 class LauncherState:
     def __init__(self):
         seed_bundled_projects()
@@ -361,15 +342,8 @@ class LauncherState:
             "role_name",
             "app_subtitle",
             "android_package",
-            "firebase_service_account_path",
-            "google_services_path",
-            "firebase_web_config_path",
-            "eva_path",
-            "horus_path",
-            "eva_remote",
-            "horus_remote",
             "web_port",
-            "horus_port",
+            "client_port",
             "microphone_device",
         ]:
             if key in form:
@@ -381,16 +355,13 @@ class LauncherState:
         self.apply_release_configuration()
 
     def eva_path(self) -> Path:
-        return Path(self.settings["eva_path"]).expanduser()
-
-    def horus_path(self) -> Path:
-        return Path(self.settings["horus_path"]).expanduser()
+        return app_root()
 
     def eva_config_path(self) -> Path:
         return self.eva_path() / "config" / "eva.config.json"
 
     def media_root(self) -> Path:
-        return runtime_assets_root()
+        return app_root() / "media"
 
     def aliases_path(self) -> Path:
         return self.media_root() / "aliases.json"
@@ -429,7 +400,7 @@ class LauncherState:
             env["ANDROID_USER_HOME"] = str(app_root() / ".android")
         env["GRADLE_USER_HOME"] = str(app_root() / ".gradle")
         env["EVA_DB_PATH"] = str(runtime_sqlite_path())
-        env["EVA_MEDIA_ROOT"] = str(runtime_assets_root())
+        env["EVA_MEDIA_ROOT"] = str(app_root() / "media")
         return env
 
     def run_command(self, command: list[str], cwd: Path, label: str) -> int:
@@ -473,21 +444,28 @@ class LauncherState:
         ignored = {
             ".git",
             ".venv",
+            ".venv-build",
             "__pycache__",
-            "node_modules",
-            ".expo",
+            ".android",
+            ".gradle",
+            "apks",
             "dist",
             "build",
-            ".gradle",
-            ".kotlin",
             ".idea",
             ".vscode",
+            "managed_releases",
+            "vendor",
             VOSK_MODEL_DIR,
             VOSK_MODEL_ZIP,
         }
-        if Path(directory).name in {"android", "ios"}:
-            ignored.update({"build", ".gradle", "local.properties"})
-        return {name for name in names if name in ignored or name.endswith(".pyc")}
+        return {
+            name
+            for name in names
+            if name in ignored
+            or name.endswith(".pyc")
+            or name.endswith(".sqlite3")
+            or ".sqlite3.backup-" in name
+        }
 
     def snapshot_project(self, name: str, source: Path, destination: Path) -> dict:
         if not source.exists():
@@ -529,10 +507,9 @@ class LauncherState:
         timestamp_root.mkdir(parents=True, exist_ok=True)
         current_root.mkdir(parents=True, exist_ok=True)
 
-        eva_metadata = self.snapshot_project("EVA", self.eva_path(), timestamp_root / "Asistente EVA")
-        horus_metadata = self.snapshot_project("Horus", self.horus_path(), timestamp_root / "horus")
+        eva_metadata = self.snapshot_project("LauncherEVA", self.eva_path(), timestamp_root / "LauncherEVA")
 
-        for source_name, target_name in [("Asistente EVA", "Asistente EVA"), ("horus", "horus")]:
+        for source_name, target_name in [("LauncherEVA", "LauncherEVA")]:
             source = timestamp_root / source_name
             target = current_root / target_name
             if target.exists():
@@ -546,7 +523,6 @@ class LauncherState:
         manifest = {
             "createdAt": datetime.now().isoformat(timespec="seconds"),
             "eva": eva_metadata,
-            "horus": horus_metadata,
         }
         save_json(timestamp_root / "release.manifest.json", manifest)
         save_json(current_root / "release.manifest.json", manifest)
@@ -576,7 +552,7 @@ class LauncherState:
 
         self.log(f"[EVA] Descargando modelo Vosk desde {VOSK_MODEL_URL}.")
         try:
-            with urllib.request.urlopen(VOSK_MODEL_URL) as response, zip_path.open("wb") as output:
+            with urllib.request.urlopen(VOSK_MODEL_URL, timeout=30) as response, zip_path.open("wb") as output:
                 shutil.copyfileobj(response, output)
         except OSError as error:
             self.log(f"[EVA] Error descargando Vosk: {error}")
@@ -592,14 +568,7 @@ class LauncherState:
         self.log(f"[EVA] Modelo Vosk instalado en {model_dir}.")
 
     def ensure_horus_dependencies(self) -> None:
-        horus_path = self.horus_path()
-        if not (horus_path / "package.json").exists():
-            self.log("[Horus] No encuentro package.json; salto dependencias Node.")
-            return
-        if (horus_path / "package-lock.json").exists():
-            self.run_command(["npm", "ci"], horus_path, "Horus")
-        else:
-            self.run_command(["npm", "install"], horus_path, "Horus")
+        self.log("[Cliente] La web móvil ahora forma parte de EVA; no hay dependencias Node separadas.")
 
     def prepare_public_release_workflow(self) -> None:
         self.log("Preparando workflow completo de public release.")
@@ -635,8 +604,7 @@ class LauncherState:
             self.log(f"[{name}] Pull falló. Comprueba que origin/{PUBLIC_BRANCH} existe.")
 
     def update_both(self) -> None:
-        self.update_repo("EVA", self.eva_path(), self.settings.get("eva_remote", ""))
-        self.update_repo("Horus", self.horus_path(), self.settings.get("horus_remote", ""))
+        self.update_repo("LauncherEVA", self.eva_path(), "")
 
     def start_eva(self) -> None:
         if self.eva_process and self.eva_process.poll() is None:
@@ -682,6 +650,8 @@ class LauncherState:
             self.eva_process.wait(timeout=8)
         except subprocess.TimeoutExpired:
             self.eva_process.kill()
+            self.eva_process.wait(timeout=3)
+        self.eva_process = None
         self.log("EVA detenida.")
 
     def save_theme(self, form: dict[str, str]) -> None:
@@ -827,34 +797,21 @@ class LauncherState:
             "roleName": role_name,
             "appSubtitle": self.app_subtitle(),
         }
-        config["network"] = {
-            "webPort": parse_port(self.settings.get("web_port"), 8080),
-            "horusPort": parse_port(self.settings.get("horus_port"), 8081),
-            "wsPort": 8765,
+        config["server"] = {
+            "host": "0.0.0.0",
+            "evaPort": parse_port(self.settings.get("web_port"), 8000),
+            "clientPort": parse_port(self.settings.get("client_port"), 8080),
         }
         microphone_id = self.settings.get("microphone_device", "").strip()
         config["audio"] = {
             "inputDeviceId": microphone_id,
             "inputDeviceName": self.microphone_name(microphone_id),
         }
-        firebase_config = config.get("firebase") if isinstance(config.get("firebase"), dict) else {}
-        service_account = self.prepare_eva_service_account()
-        if service_account:
-            firebase_config["serviceAccountPath"] = service_account
-        else:
-            firebase_config.pop("serviceAccountPath", None)
-        web_firebase = self.prepare_eva_firebase_web_config()
-        if web_firebase:
-            firebase_config["web"] = web_firebase
-        config["firebase"] = firebase_config
+        config.pop("firebase", None)
+        config.pop("network", None)
         self.save_eva_config(config)
 
-        self.write_horus_app_config(theme)
-        self.write_horus_brand()
-        self.write_horus_audio_assets()
-        self.write_horus_theme(theme)
-        self.prepare_horus_google_services()
-        self.log("Configuración propagada a EVA y Horus.")
+        self.log("Configuración propagada al proyecto combinado.")
 
     def microphone_name(self, microphone_id: str) -> str:
         if not microphone_id:
@@ -866,330 +823,8 @@ class LauncherState:
 
         return ""
 
-    def prepare_eva_service_account(self) -> str | None:
-        source_text = self.settings.get("firebase_service_account_path", "").strip()
-        if not source_text:
-            return None
-        source = Path(source_text).expanduser()
-        if not source.exists() or not source.is_file():
-            self.log(f"Firebase service account no encontrado: {source}")
-            return None
-        destination = self.eva_path() / "config" / "firebase-service-account.json"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if source.resolve() != destination.resolve():
-            shutil.copyfile(source, destination)
-        return destination.as_posix()
-
-    def prepare_eva_firebase_web_config(self) -> dict | None:
-        source_text = self.settings.get("firebase_web_config_path", "").strip()
-        if not source_text:
-            return None
-
-        source = Path(source_text).expanduser()
-        if not source.exists() or not source.is_file():
-            self.log(f"Firebase web JSON no encontrado: {source}")
-            return None
-
-        config = parse_firebase_web_file(source)
-        if not config.get("vapidPublicKey"):
-            self.log("Firebase web ignorado: falta clave pública VAPID.")
-            return None
-
-        missing = [
-            key
-            for key in ("apiKey", "projectId", "messagingSenderId", "appId")
-            if not config.get("firebaseConfig", {}).get(key)
-        ]
-        if missing:
-            self.log(f"Firebase web guardado, pero falta firebaseConfig: {', '.join(missing)}.")
-        else:
-            self.log("Firebase web configurado para Horus PWA.")
-
-        return config
-
-    def prepare_horus_google_services(self) -> None:
-        destination = self.horus_path() / "google-services.json"
-        legacy_destination = self.horus_path() / "android" / "app" / "google-services.json"
-        source_text = self.settings.get("google_services_path", "").strip()
-        if not source_text:
-            if destination.exists():
-                destination.unlink()
-            if legacy_destination.exists():
-                legacy_destination.unlink()
-            self.log("google-services.json eliminado: Firebase de app no configurado.")
-            return
-        source = Path(source_text).expanduser()
-        if not source.exists() or not source.is_file():
-            self.log(f"google-services.json no encontrado: {source}")
-            if destination.exists():
-                destination.unlink()
-            if legacy_destination.exists():
-                legacy_destination.unlink()
-            return
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if source.resolve() != destination.resolve():
-            shutil.copyfile(source, destination)
-        self.log("google-services.json configurado para Horus.")
-
-    def horus_firebase_enabled(self) -> bool:
-        source_text = self.settings.get("google_services_path", "").strip()
-        if source_text and Path(source_text).expanduser().is_file():
-            return True
-        return (self.horus_path() / "google-services.json").is_file()
-
-    def write_horus_app_config(self, theme: dict) -> None:
-        horus_path = self.horus_path()
-        app_json_path = horus_path / "app.json"
-        package_json_path = horus_path / "package.json"
-        role_name = self.role_name()
-        slug = app_slug(role_name)
-        package_name = self.settings.get("android_package", "").strip() or f"com.eva.{package_slug(role_name)}"
-        background = theme.get("background", "#0D0F12")
-
-        app_config = load_json(app_json_path, {})
-        if not isinstance(app_config, dict):
-            app_config = {}
-        expo = app_config.setdefault("expo", {})
-        expo["name"] = role_name
-        expo["slug"] = slug
-        extra = expo.setdefault("extra", {})
-        if isinstance(extra, dict):
-            eas = extra.get("eas")
-            if isinstance(eas, dict):
-                eas.pop("projectId", None)
-            if eas == {}:
-                extra.pop("eas", None)
-            if extra == {}:
-                expo.pop("extra", None)
-        expo.setdefault("ios", {})["bundleIdentifier"] = package_name
-        android = expo.setdefault("android", {})
-        android["package"] = package_name
-        android["icon"] = "./assets/icon.png"
-        android.setdefault("adaptiveIcon", {})["foregroundImage"] = "./assets/adaptive-icon.png"
-        if is_hex_color(str(background)):
-            android["adaptiveIcon"]["backgroundColor"] = background
-        permissions = [
-            "android.permission.RECORD_AUDIO",
-            "android.permission.MODIFY_AUDIO_SETTINGS",
-        ]
-        if self.horus_firebase_enabled():
-            permissions.append("android.permission.POST_NOTIFICATIONS")
-            android["googleServicesFile"] = "./google-services.json"
-        else:
-            android.pop("googleServicesFile", None)
-        android["permissions"] = permissions
-        expo.setdefault("web", {})["favicon"] = "./assets/favicon.png"
-        plugins = expo.get("plugins")
-        if not isinstance(plugins, list):
-            plugins = []
-        plugins = [
-            plugin
-            for plugin in plugins
-            if (
-                plugin if isinstance(plugin, str)
-                else plugin[0] if isinstance(plugin, list) and plugin
-                else ""
-            ) not in {"@react-native-firebase/app", "@react-native-firebase/messaging"}
-        ]
-        if self.horus_firebase_enabled():
-            plugins = ["@react-native-firebase/app", "@react-native-firebase/messaging", *plugins]
-        expo["plugins"] = plugins
-        for plugin in expo.get("plugins", []):
-            if isinstance(plugin, list) and plugin and plugin[0] == "expo-splash-screen" and isinstance(plugin[1], dict):
-                plugin[1]["image"] = "./assets/icon.png"
-                if is_hex_color(str(background)):
-                    plugin[1]["backgroundColor"] = background
-                    plugin[1].setdefault("dark", {})["backgroundColor"] = background
-        save_json(app_json_path, app_config)
-
-        package_config = load_json(package_json_path, {})
-        if isinstance(package_config, dict):
-            package_config["name"] = slug
-            save_json(package_json_path, package_config)
-
-    def write_horus_brand(self) -> None:
-        role_name = self.role_name()
-        display_name = role_name.upper()
-        brand_path = self.horus_path() / "src" / "config" / "brand.ts"
-        brand_path.parent.mkdir(parents=True, exist_ok=True)
-        brand_path.write_text(
-            "export const APP_BRAND = {\n"
-            f"  appName: {json.dumps(role_name, ensure_ascii=False)},\n"
-            f"  displayName: {json.dumps(display_name, ensure_ascii=False)},\n"
-            f"  loadingText: {json.dumps(f'Despertando a {display_name}...', ensure_ascii=False)},\n"
-            f"  subtitle: {json.dumps(self.app_subtitle(), ensure_ascii=False)},\n"
-            f"  audioFeedLabel: {json.dumps(f'{display_name} AUDIO FEED', ensure_ascii=False)},\n"
-            f"  videoFeedLabel: {json.dumps(f'TRANSMISION {display_name}', ensure_ascii=False)},\n"
-            "} as const;\n",
-            encoding="utf-8",
-        )
-
-    def write_horus_audio_assets(self) -> None:
-        config_path = self.horus_path() / "src" / "config" / "audioAssets.ts"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        assets = {
-            "login": self.horus_path() / "assets" / "audio" / "login.mp3",
-            "menu": self.horus_path() / "assets" / "audio" / "menu.mp3",
-        }
-
-        def asset_value(path: Path) -> str:
-            if not path.exists():
-                return "null"
-            relative = os.path.relpath(path, config_path.parent).replace(os.sep, "/")
-            return f"require({json.dumps(relative)})"
-
-        config_path.write_text(
-            "// Generado por Launcher EVA.\n\n"
-            "export const HORUS_AUDIO_ASSETS = {\n"
-            f"  login: {asset_value(assets['login'])},\n"
-            f"  menu: {asset_value(assets['menu'])},\n"
-            "} as const;\n",
-            encoding="utf-8",
-        )
-
-    def write_horus_theme(self, theme: dict) -> None:
-        colors = {
-            "background": theme.get("background", "#0D0F12"),
-            "surface": theme.get("surface", "#E8E1D6"),
-            "action": theme.get("danger", "#8B1E1E"),
-            "premium": theme.get("accent", "#C9A24A"),
-            "textDark": "#1A1A1A",
-            "textLight": theme.get("text", "#EDEDED"),
-            "neutralStone": theme.get("muted", "#6E6A64"),
-            "neutralGold": theme.get("accent", "#D4AF37"),
-            "borderLight": theme.get("surfaceAlt", "#D2C7B8"),
-            "borderDark": "#262A30",
-            "borderGold": theme.get("accent", "#C9A24A"),
-            "success": "#3F6F4E",
-            "warning": theme.get("accent", "#C9A24A"),
-            "danger": theme.get("danger", "#8B1E1E"),
-            "info": theme.get("primary", "#3E5F7A"),
-        }
-        for key, value in list(colors.items()):
-            if not is_hex_color(str(value)):
-                colors[key] = "#0D0F12"
-
-        theme_path = self.horus_path() / "src" / "theme" / "theme.ts"
-        theme_path.write_text(
-            "// Generado por Launcher EVA.\n\n"
-            "export const HORUS_COLORS = {\n"
-            f"  background: {json.dumps(colors['background'])},\n"
-            f"  surface: {json.dumps(colors['surface'])},\n"
-            f"  action: {json.dumps(colors['action'])},\n"
-            f"  premium: {json.dumps(colors['premium'])},\n"
-            f"  textDark: {json.dumps(colors['textDark'])},\n"
-            f"  textLight: {json.dumps(colors['textLight'])},\n"
-            "  neutral: {\n"
-            f"    stone: {json.dumps(colors['neutralStone'])},\n"
-            f"    gold: {json.dumps(colors['neutralGold'])},\n"
-            "  },\n"
-            "  border: {\n"
-            f"    light: {json.dumps(colors['borderLight'])},\n"
-            f"    dark: {json.dumps(colors['borderDark'])},\n"
-            f"    gold: {json.dumps(colors['borderGold'])},\n"
-            "  },\n"
-            "  status: {\n"
-            f"    success: {json.dumps(colors['success'])},\n"
-            f"    warning: {json.dumps(colors['warning'])},\n"
-            f"    danger: {json.dumps(colors['danger'])},\n"
-            f"    info: {json.dumps(colors['info'])},\n"
-            "  },\n"
-            "} as const;\n\n"
-            "export const HORUS_THEME = {\n"
-            "  colors: HORUS_COLORS,\n"
-            "  spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },\n"
-            "  radius: { sm: 6, md: 10, lg: 16, xl: 22 },\n"
-            "  fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 28 },\n"
-            "  shadow: {\n"
-            "    panel: {\n"
-            "      shadowColor: \"#000000\",\n"
-            "      shadowOpacity: 0.35,\n"
-            "      shadowRadius: 10,\n"
-            "      shadowOffset: { width: 0, height: 4 },\n"
-            "      elevation: 6,\n"
-            "    },\n"
-            "  },\n"
-            "} as const;\n",
-            encoding="utf-8",
-        )
-
-    def set_horus_asset(self, upload_path: Path, original_name: str, asset_name: str) -> None:
-        if Path(original_name).suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-            self.log("Los iconos/fotos de app deben ser PNG o JPG.")
-            return
-        destination = self.horus_path() / "assets" / asset_name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(upload_path, destination)
-        self.log(f"Asset Horus actualizado: assets/{asset_name}.")
-
-    def set_horus_audio(self, upload_path: Path, original_name: str, target: str) -> None:
-        if target not in {"login", "menu"}:
-            self.log("Audio Horus ignorado: destino desconocido.")
-            return
-        if Path(original_name).suffix.lower() != ".mp3":
-            self.log("El audio de Horus debe ser MP3.")
-            return
-        destination = self.horus_path() / "assets" / "audio" / f"{target}.mp3"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(upload_path, destination)
-        self.write_horus_audio_assets()
-        self.log(f"Audio Horus actualizado: assets/audio/{target}.mp3.")
-
-    def delete_horus_audio(self, target: str) -> None:
-        if target not in {"login", "menu"}:
-            self.log("Audio Horus ignorado: destino desconocido.")
-            return
-        destination = self.horus_path() / "assets" / "audio" / f"{target}.mp3"
-        destination.unlink(missing_ok=True)
-        self.write_horus_audio_assets()
-        self.log(f"Audio Horus eliminado: {target}.")
-
-    def set_firebase_file(self, upload_path: Path, original_name: str, target: str) -> None:
-        if Path(original_name).suffix.lower() != ".json":
-            self.log("Firebase debe configurarse con archivos JSON.")
-            return
-        destination_root = app_root() / "firebase"
-        destination_root.mkdir(parents=True, exist_ok=True)
-        if target == "service":
-            destination = destination_root / "firebase-service-account.json"
-            setting = "firebase_service_account_path"
-        elif target == "google":
-            destination = destination_root / "google-services.json"
-            setting = "google_services_path"
-        else:
-            destination = destination_root / "firebase-web.json"
-            setting = "firebase_web_config_path"
-        shutil.copyfile(upload_path, destination)
-        self.settings[setting] = destination.as_posix()
-        save_json(self.settings_path, self.settings)
-        self.log(f"Firebase configurado: {destination.name}.")
-        self.apply_release_configuration()
-
     def build_horus_release(self) -> None:
-        self.apply_release_configuration()
-        self.run_command(["npm", "run", "test"], self.horus_path(), "Horus")
-        code = self.run_command(["npm", "run", "build:release"], self.horus_path(), "Horus")
-        if code == 0:
-            self.collect_horus_apks()
-
-    def collect_horus_apks(self) -> None:
-        outputs = self.horus_path() / "android" / "app" / "build" / "outputs"
-        destination_root = runtime_apks_root() / "horus"
-        destination_root.mkdir(parents=True, exist_ok=True)
-
-        if not outputs.exists():
-            self.log("[Horus] No encuentro outputs de Gradle para copiar APKs.")
-            return
-
-        copied = 0
-        for source in outputs.rglob("*.apk"):
-            destination = destination_root / source.name
-            shutil.copyfile(source, destination)
-            copied += 1
-            self.log(f"[Horus] APK copiada: {destination}.")
-
-        if copied == 0:
-            self.log("[Horus] Build completado, pero no encontré APKs.")
+        self.log("[Cliente] La app móvil nueva es la web cliente integrada en EVA. No hay build APK separado.")
 
 
 STATE = LauncherState()
@@ -1208,7 +843,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path in {"/media/upload", "/intro/upload", "/horus/assets", "/horus/audio", "/firebase/upload"}:
+        if path in {"/media/upload", "/intro/upload"}:
             form, files = self.multipart()
         else:
             form = self.form()
@@ -1219,9 +854,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/pull":
             target = form.get("target", "both")
             if target == "eva":
-                background(STATE.update_repo, "EVA", STATE.eva_path(), STATE.settings.get("eva_remote", ""))
-            elif target == "horus":
-                background(STATE.update_repo, "Horus", STATE.horus_path(), STATE.settings.get("horus_remote", ""))
+                background(STATE.update_repo, "LauncherEVA", STATE.eva_path(), "")
             else:
                 background(STATE.update_both)
         elif path == "/start-eva":
@@ -1256,29 +889,6 @@ class Handler(BaseHTTPRequestHandler):
             if upload:
                 STATE.set_intro_upload(upload["path"], upload["filename"])
                 upload["path"].unlink(missing_ok=True)
-        elif path == "/horus/assets":
-            for field, asset_name in [("icon", "icon.png"), ("adaptive", "adaptive-icon.png"), ("favicon", "favicon.png")]:
-                upload = files.get(field)
-                if upload:
-                    STATE.set_horus_asset(upload["path"], upload["filename"], asset_name)
-                    upload["path"].unlink(missing_ok=True)
-            STATE.apply_release_configuration()
-        elif path == "/horus/audio":
-            for field in ["login", "menu"]:
-                upload = files.get(field)
-                if upload:
-                    STATE.set_horus_audio(upload["path"], upload["filename"], field)
-                    upload["path"].unlink(missing_ok=True)
-            STATE.apply_release_configuration()
-        elif path == "/horus/audio/delete":
-            STATE.delete_horus_audio(form.get("target", ""))
-            STATE.apply_release_configuration()
-        elif path == "/firebase/upload":
-            for field, target in [("service", "service"), ("google", "google"), ("web", "web")]:
-                upload = files.get(field)
-                if upload:
-                    STATE.set_firebase_file(upload["path"], upload["filename"], target)
-                    upload["path"].unlink(missing_ok=True)
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -1354,8 +964,6 @@ def render_page() -> str:
     eva_running = STATE.eva_process is not None and STATE.eva_process.poll() is None
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
-    horus_audio_login = STATE.horus_path() / "assets" / "audio" / "login.mp3"
-    horus_audio_menu = STATE.horus_path() / "assets" / "audio" / "menu.mp3"
     log_text = "\n".join(STATE.logs[-180:])
     preset_buttons = "".join(
         f'<button name="preset" value="{h(key)}">{h(value["label"])}</button>'
@@ -1417,8 +1025,8 @@ def render_page() -> str:
 <header>
   <div><h1>Launcher EVA</h1><div class="status">EVA {'arrancada' if eva_running else 'detenida'}</div></div>
   <div class="actions">
-    <a class="button" href="http://localhost:{h(settings.get('web_port', '8080'))}/" target="_blank">Abrir EVA</a>
-    <a class="button" href="http://localhost:{h(settings.get('horus_port', '8081'))}/" target="_blank">Abrir Horus</a>
+    <a class="button" href="http://localhost:{h(settings.get('web_port', '8000'))}/" target="_blank">Abrir EVA</a>
+    <a class="button" href="http://localhost:{h(settings.get('client_port', '8080'))}/" target="_blank">Abrir Cliente</a>
     <form method="post" action="/start-eva"><button>Arrancar EVA</button></form>
     <form method="post" action="/stop-eva"><button>Detener EVA</button></form>
   </div>
@@ -1431,46 +1039,16 @@ def render_page() -> str:
         <label>Nombre del rol / app<input name="role_name" value="{h(role_name)}"></label>
         <label>Package Android<input name="android_package" value="{h(default_package)}"></label>
         <label class="span2">Subtítulo app<input name="app_subtitle" value="{h(settings.get('app_subtitle', 'EVA mantiene el vinculo abierto'))}"></label>
-        <label>Firebase EVA service account<input name="firebase_service_account_path" value="{h(settings.get('firebase_service_account_path'))}"></label>
-        <label>Firebase app google-services<input name="google_services_path" value="{h(settings.get('google_services_path'))}"></label>
-        <label>Ruta EVA<input name="eva_path" value="{h(settings.get('eva_path'))}"></label>
-        <label>Ruta Horus<input name="horus_path" value="{h(settings.get('horus_path'))}"></label>
-        <label>Remote EVA opcional<input name="eva_remote" value="{h(settings.get('eva_remote'))}"></label>
-        <label>Remote Horus opcional<input name="horus_remote" value="{h(settings.get('horus_remote'))}"></label>
-        <label>Puerto web EVA<input name="web_port" value="{h(settings.get('web_port'))}"></label>
-        <label>Puerto Horus PWA<input name="horus_port" value="{h(settings.get('horus_port', '8081'))}"></label>
+        <label>Puerto EVA/configurador<input name="web_port" value="{h(settings.get('web_port', '8000'))}"></label>
+        <label>Puerto cliente móvil<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
         <label class="span2">Microfono EVA<select name="microphone_device">{microphone_options}</select></label>
         <div class="actions span2"><button class="primary">Guardar configuración y propagar</button></div>
       </form>
-      <form class="grid" method="post" action="/horus/assets" enctype="multipart/form-data">
-        <label>Icono app PNG/JPG<input type="file" name="icon" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
-        <label>Icono adaptive PNG/JPG<input type="file" name="adaptive" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
-        <label>Favicon web PNG/JPG<input type="file" name="favicon" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
-        <div class="actions"><button>Guardar iconos Horus</button></div>
-      </form>
-      <form class="grid" method="post" action="/horus/audio" enctype="multipart/form-data">
-        <label>MP3 login Horus <small>{'Configurado' if horus_audio_login.exists() else 'Sin audio'}</small><input type="file" name="login" accept=".mp3,audio/mpeg"></label>
-        <label>MP3 menú Horus <small>{'Configurado' if horus_audio_menu.exists() else 'Sin audio'}</small><input type="file" name="menu" accept=".mp3,audio/mpeg"></label>
-        <div class="actions span2"><button>Guardar audios Horus</button></div>
-      </form>
-      <form class="actions" method="post" action="/horus/audio/delete">
-        <button name="target" value="login">Quitar audio login</button>
-        <button name="target" value="menu">Quitar audio menú</button>
-      </form>
-      <form class="grid" method="post" action="/firebase/upload" enctype="multipart/form-data">
-        <label>Service account EVA JSON<input type="file" name="service" accept=".json,application/json"></label>
-        <label>google-services app JSON<input type="file" name="google" accept=".json,application/json"></label>
-        <label class="span2">Firebase web / VAPID JSON<input type="file" name="web" accept=".json,application/json"></label>
-        <div class="actions span2"><button>Guardar Firebase del rol</button></div>
-      </form>
       <form class="actions" method="post" action="/pull">
-        <button name="target" value="both">Pull ambos public_release</button>
-        <button name="target" value="eva">Pull EVA</button>
-        <button name="target" value="horus">Pull Horus</button>
+        <button name="target" value="both">Pull public_release</button>
       </form>
       <form class="actions" method="post" action="/apply-release"><button>Reaplicar configuración</button></form>
       <form class="actions" method="post" action="/prepare-workflow"><button class="primary">Preparar workflow completo</button></form>
-      <form class="actions" method="post" action="/build/horus"><button class="primary">Generar release Horus</button></form>
     </section>
 
     <section>
