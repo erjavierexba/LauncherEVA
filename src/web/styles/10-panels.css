@@ -364,6 +364,54 @@
       overflow-wrap: anywhere;
     }
 
+    .object-card {
+      display: grid;
+      gap: 9px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--page);
+    }
+
+    .object-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .object-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+
+    .object-fields textarea {
+      min-height: 70px;
+      resize: vertical;
+    }
+
+    .object-rolls {
+      display: grid;
+      gap: 8px;
+    }
+
+    .trait-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .trait-chip {
+      padding: 3px 7px;
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+      border-radius: 999px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
     @keyframes dice-spin {
       from {
         transform: rotate(0deg) scale(1);

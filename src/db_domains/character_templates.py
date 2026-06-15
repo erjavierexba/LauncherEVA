@@ -3,7 +3,7 @@ import re
 
 
 class CharacterTemplatesRepository:
-    FIELD_TYPES = {"text", "int", "b_int", "throw", "formula", "array", "cycle"}
+    FIELD_TYPES = {"text", "long_text", "csv", "int", "b_int", "throw", "formula", "array", "cycle"}
     BASIC_CHARACTER_SCHEMA = {
         "id": "personaje_basico",
         "name": "Personaje básico",
@@ -64,8 +64,10 @@ class CharacterTemplatesRepository:
                 "itemTemplate": {
                     "fields": [
                         {"key": "name", "label": "Nombre", "type": "text", "default": ""},
-                        {"key": "attack_bonus", "label": "Ataque", "type": "number", "default": 0},
-                        {"key": "damage", "label": "Daño", "type": "text", "default": ""},
+                        {"key": "traits", "label": "Traits", "type": "csv", "default": ""},
+                        {"key": "description", "label": "Descripción", "type": "long_text", "default": ""},
+                        {"key": "attack", "label": "Acierto", "type": "formula", "formula": "1d20 + attack_bonus", "default": ""},
+                        {"key": "damage", "label": "Daño", "type": "formula", "formula": "1d8", "default": ""},
                     ],
                 },
             },
@@ -348,6 +350,8 @@ class CharacterTemplatesRepository:
                     "label": item_field.get("label", ""),
                     "type": self._schema_field_type(item_field),
                     "defaultValue": item_field.get("default", ""),
+                    "formula": item_field.get("formula", ""),
+                    "options": item_field.get("options", ""),
                     "sortOrder": (item_index + 1) * 10,
                 })
 
@@ -402,6 +406,12 @@ class CharacterTemplatesRepository:
 
         if field_type == "cycle":
             return "cycle"
+
+        if field_type in {"long_text", "textarea"}:
+            return "long_text"
+
+        if field_type in {"csv", "tags"}:
+            return "csv"
 
         return "text"
 
@@ -1020,6 +1030,8 @@ class CharacterTemplatesRepository:
                 "label": label,
                 "type": self._normalize_field_type(str(field.get("type", "text"))),
                 "defaultValue": str(field.get("defaultValue", "")),
+                "formula": str(field.get("formula", "")).strip(),
+                "options": str(field.get("options", "")).strip(),
                 "sortOrder": self._to_int(field.get("sortOrder"), (index + 1) * 10),
             })
 
@@ -1046,6 +1058,8 @@ class CharacterTemplatesRepository:
                     "label": str(field.get("label", "")),
                     "type": self._normalize_field_type(str(field.get("type", "text"))),
                     "defaultValue": str(field.get("defaultValue", "")),
+                    "formula": str(field.get("formula", "")),
+                    "options": str(field.get("options", "")),
                     "sortOrder": self._to_int(field.get("sortOrder"), (index + 1) * 10),
                 }
                 for index, field in enumerate(item_fields)

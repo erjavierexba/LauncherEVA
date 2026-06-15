@@ -402,6 +402,64 @@ h2 {
   min-height: 42px;
 }
 
+.sheet-field-wide {
+  grid-column: 1 / -1;
+}
+
+.object-list,
+.object-items {
+  display: grid;
+  gap: 10px;
+}
+
+.object-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0f141b;
+}
+
+.object-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.object-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.object-fields textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.object-rolls {
+  display: grid;
+  gap: 8px;
+}
+
+.trait-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.trait-chip {
+  padding: 3px 7px;
+  border: 1px solid rgba(215, 173, 88, 0.35);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .roll-history {
   display: grid;
   gap: 6px;

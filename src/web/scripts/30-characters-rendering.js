@@ -333,19 +333,11 @@
 
         items.forEach((item, itemIndex) => {
           const row = document.createElement("div");
-          row.className = "array-item";
-
-          for (const itemField of itemFields) {
-            const control = createArrayItemInput(itemField, item[itemField.key] || "");
-            control.addEventListener("change", () => {
-              items[itemIndex] = {
-                ...items[itemIndex],
-                [itemField.key]: control.value,
-              };
-              sync();
-            });
-            row.appendChild(control);
-          }
+          row.className = "object-card";
+          const head = document.createElement("div");
+          head.className = "object-card-head";
+          const title = document.createElement("strong");
+          title.textContent = objectTitle(item, itemFields, itemIndex);
 
           const remove = document.createElement("button");
           remove.type = "button";
@@ -357,7 +349,31 @@
             render();
             sync();
           });
-          row.appendChild(remove);
+          head.append(title, remove);
+          row.appendChild(head);
+
+          const fieldsNode = document.createElement("div");
+          fieldsNode.className = "object-fields";
+          const rollsNode = document.createElement("div");
+          rollsNode.className = "object-rolls";
+
+          for (const itemField of itemFields) {
+            if (isObjectRollField(itemField)) {
+              rollsNode.appendChild(createObjectRollButton(itemField, item));
+            } else {
+              fieldsNode.appendChild(createArrayItemInput(itemField, item[itemField.key] || "", (nextValue) => {
+                items[itemIndex] = {
+                  ...items[itemIndex],
+                  [itemField.key]: nextValue,
+                };
+                sync();
+                title.textContent = objectTitle(items[itemIndex], itemFields, itemIndex);
+              }));
+            }
+          }
+
+          row.appendChild(fieldsNode);
+          if (rollsNode.children.length) row.appendChild(rollsNode);
           list.appendChild(row);
         });
       };
@@ -378,12 +394,14 @@
       return wrapper;
     }
 
-    function createArrayItemInput(field, value) {
-      const input = document.createElement("input");
+    function createArrayItemInput(field, value, onChange = null) {
+      const label = document.createElement("label");
+      label.textContent = field.label || field.key;
+      const input = document.createElement(field.type === "long_text" ? "textarea" : "input");
       input.value = value;
       input.placeholder = field.label;
 
-      if (field.type === "int" || field.type === "b_int") {
+      if (field.type === "int" || field.type === "b_int" || field.type === "number") {
         input.type = "number";
         input.step = "1";
       } else {
@@ -394,7 +412,20 @@
         input.placeholder = `${field.label} d20+3`;
       }
 
-      return input;
+      if (field.type === "csv") {
+        input.placeholder = "rápido, sutil, mágico";
+      }
+
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("input", () => {
+        if (onChange) onChange(input.value);
+      });
+      label.appendChild(input);
+      if (field.type === "csv") {
+        label.appendChild(renderCsvChips(value));
+      }
+
+      return label;
     }
 
     function normalizeArrayValue(value) {
@@ -418,6 +449,53 @@
       }
 
       return [{ key: "nombre", label: "Nombre", type: "text", defaultValue: "" }];
+    }
+
+    function isObjectRollField(field) {
+      return field.type === "formula" || field.type === "throw" || field.type === "roll" || Boolean(field.formula);
+    }
+
+    function objectTitle(value, itemFields, index) {
+      const titleKey = ["name", "nombre", "title", "titulo"].find((key) => value[key]);
+      if (titleKey) return value[titleKey];
+      const firstTextField = (itemFields || []).find((field) => ["text", "long_text"].includes(field.type) && value[field.key]);
+      return firstTextField ? value[firstTextField.key] : `Objeto ${index + 1}`;
+    }
+
+    function renderCsvChips(value) {
+      const chips = document.createElement("div");
+      chips.className = "trait-list";
+      String(value || "").split(",").map((part) => part.trim()).filter(Boolean).forEach((part) => {
+        const chip = document.createElement("span");
+        chip.className = "trait-chip";
+        chip.textContent = part;
+        chips.appendChild(chip);
+      });
+      return chips;
+    }
+
+    function createObjectRollButton(field, values = {}) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "formula-roll";
+      const output = document.createElement("div");
+      output.className = "formula-roll-output";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = field.label || "Tirada";
+      const formula = field.formula || values[field.key] || field.defaultValue || "1d20";
+      output.textContent = formula;
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        try {
+          const result = evaluateFormulaExpression(formula, values);
+          output.textContent = `${result.total} · ${result.breakdown}`;
+        } catch (error) {
+          output.textContent = error instanceof Error ? error.message : String(error);
+        }
+      });
+      wrapper.append(button, output);
+      return wrapper;
     }
 
     function normalizeInteger(value) {

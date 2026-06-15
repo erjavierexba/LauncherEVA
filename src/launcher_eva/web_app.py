@@ -45,6 +45,7 @@ ALLOWED_MEDIA_EXTENSIONS = {
     ".webm",
     ".pdf",
 }
+FAVICON_PATH = Path("src") / "web" / "assets" / "eva_favicon.png"
 
 THEME_PRESETS = {
     "eva": {
@@ -310,6 +311,9 @@ class LauncherState:
 
     def media_root(self) -> Path:
         return app_root() / "media"
+
+    def favicon_path(self) -> Path:
+        return app_root() / FAVICON_PATH
 
     def aliases_path(self) -> Path:
         return self.media_root() / "aliases.json"
@@ -703,6 +707,16 @@ class LauncherState:
         shutil.copyfile(upload_path, destination)
         self.log("Música de intro actualizada: assets/music/despertar.mp3.")
 
+    def set_favicon_upload(self, upload_path: Path, original_name: str) -> None:
+        if Path(original_name).suffix.lower() != ".png":
+            self.log("El favicon debe ser un PNG.")
+            return
+
+        destination = self.favicon_path()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(upload_path, destination)
+        self.log("Favicon actualizado para EVA y la web de jugadores.")
+
     def role_name(self) -> str:
         return self.settings.get("role_name", "").strip() or "EVA"
 
@@ -749,7 +763,7 @@ class LauncherState:
         return ""
 
     def build_horus_release(self) -> None:
-        self.log("[Cliente] La app móvil nueva es la web cliente integrada en EVA. No hay build APK separado.")
+        self.log("[Jugadores] La app de jugadores es una web integrada en EVA. No hay paquete nativo separado.")
 
 
 STATE = LauncherState()
@@ -764,11 +778,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/logs":
             self.send_text("\n".join(STATE.logs))
             return
+        if path in {"/favicon.png", "/favicon.ico"}:
+            self.send_file(STATE.favicon_path(), "image/png")
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path in {"/media/upload", "/intro/upload"}:
+        if path in {"/media/upload", "/intro/upload", "/favicon/upload"}:
             form, files = self.multipart()
         else:
             form = self.form()
@@ -801,9 +818,18 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/players/delete":
             STATE.delete_user(form.get("name", ""))
         elif path == "/media/upload":
-            upload = files.get("file")
-            if upload:
-                STATE.add_media_upload(upload["path"], upload["filename"], form.get("name", ""), form.get("aliases", ""))
+            uploads = [
+                (key, files[key])
+                for key in sorted(files)
+                if key == "file" or key.startswith("file_")
+            ]
+            for index, (_key, upload) in enumerate(uploads):
+                STATE.add_media_upload(
+                    upload["path"],
+                    upload["filename"],
+                    form.get(f"name_{index}", form.get("name", "")),
+                    form.get(f"aliases_{index}", form.get("aliases", "")),
+                )
                 upload["path"].unlink(missing_ok=True)
         elif path == "/media/delete":
             STATE.delete_media(form.get("filename", ""))
@@ -813,6 +839,11 @@ class Handler(BaseHTTPRequestHandler):
             upload = files.get("file")
             if upload:
                 STATE.set_intro_upload(upload["path"], upload["filename"])
+                upload["path"].unlink(missing_ok=True)
+        elif path == "/favicon/upload":
+            upload = files.get("file")
+            if upload:
+                STATE.set_favicon_upload(upload["path"], upload["filename"])
                 upload["path"].unlink(missing_ok=True)
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -837,7 +868,15 @@ class Handler(BaseHTTPRequestHandler):
         for key in fields:
             item = fields[key]
             if isinstance(item, list):
-                item = item[-1]
+                for index, subitem in enumerate(item):
+                    if subitem.filename:
+                        suffix = Path(subitem.filename).suffix
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+                            shutil.copyfileobj(subitem.file, temp)
+                            files[f"{key}_{index}"] = {"path": Path(temp.name), "filename": subitem.filename}
+                    else:
+                        form[f"{key}_{index}"] = subitem.value
+                continue
             if item.filename:
                 suffix = Path(item.filename).suffix
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
@@ -860,6 +899,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_file(self, path: Path, content_type: str) -> None:
+        if not path.exists() or not path.is_file():
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        data = path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
@@ -890,6 +942,8 @@ def render_page() -> str:
     selected_microphone = settings.get("microphone_device", "")
     client_port = parse_port(settings.get("client_port"), 8080)
     client_address = get_base_url(client_port).removeprefix("http://").removeprefix("https://")
+    favicon_path = STATE.favicon_path()
+    favicon_version = int(favicon_path.stat().st_mtime) if favicon_path.exists() else int(time.time())
     log_text = "\n".join(STATE.logs[-180:])
     preset_buttons = "".join(
         f'<button name="preset" value="{h(key)}">{h(value["label"])}</button>'
@@ -971,6 +1025,8 @@ def render_page() -> str:
     .client-share span {{ grid-column:1 / -1; color:var(--muted); font-size:12px; font-weight:800; }}
     .client-share strong {{ min-width:0; overflow:hidden; color:var(--accent); font-size:16px; text-overflow:ellipsis; white-space:nowrap; }}
     .client-share button {{ min-width:98px; }}
+    .favicon-row {{ grid-column:1 / -1; display:grid; grid-template-columns:58px minmax(0, 1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
+    .favicon-preview {{ width:48px; height:48px; border:1px solid #394554; border-radius:8px; object-fit:contain; background:#05070a; padding:6px; }}
     .embedded-note {{ min-height:36px; display:inline-flex; align-items:center; color:var(--muted); font-weight:800; }}
     table {{ width:100%; border-collapse:collapse; }}
     th, td {{ border-bottom:1px solid #2b3543; padding:8px; text-align:left; vertical-align:top; }}
@@ -986,7 +1042,7 @@ def render_page() -> str:
   <div><h1>Launcher EVA</h1><div class="status">EVA {'arrancada' if eva_running else 'detenida'}</div></div>
   <div class="actions">
     <a class="button" href="http://localhost:{h(settings.get('web_port', '8000'))}/" target="_blank">Abrir EVA</a>
-    <a class="button" href="http://localhost:{h(settings.get('client_port', '8080'))}/" target="_blank">Abrir Cliente</a>
+    <a class="button" href="http://localhost:{h(settings.get('client_port', '8080'))}/" target="_blank">Abrir jugadores</a>
     {runtime_controls}
   </div>
 </header>
@@ -995,10 +1051,10 @@ def render_page() -> str:
     <section>
       <h2>Rol y release</h2>
       <form class="grid" method="post" action="/settings">
-        <label>Nombre del rol / app<input name="role_name" value="{h(role_name)}"></label>
+        <label>Título del rol visible para jugadores<input name="role_name" value="{h(role_name)}"></label>
         <label class="span2">Subtítulo app<input name="app_subtitle" value="{h(settings.get('app_subtitle', 'EVA mantiene el vinculo abierto'))}"></label>
         <label>Puerto EVA/configurador<input name="web_port" value="{h(settings.get('web_port', '8000'))}"></label>
-        <label>Puerto cliente móvil<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
+        <label>Puerto web de jugadores<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
         <div class="client-share">
           <span>La aplicación para los jugadores está desplegada en:</span>
           <strong id="configClientAddress">{h(client_address)}</strong>
@@ -1006,6 +1062,13 @@ def render_page() -> str:
         </div>
         <label class="span2">Microfono EVA<select name="microphone_device">{microphone_options}</select></label>
         <div class="actions span2"><button class="primary">Guardar configuración y propagar</button></div>
+      </form>
+      <form class="grid" method="post" action="/favicon/upload" enctype="multipart/form-data">
+        <div class="favicon-row">
+          <img class="favicon-preview" src="/favicon.png?v={favicon_version}" alt="">
+          <label>Favicon de la web de jugadores y EVA<input type="file" name="file" accept="image/png"></label>
+          <button>Guardar favicon</button>
+        </div>
       </form>
       <form class="actions" method="post" action="/pull">
         <button name="target" value="both">Pull public_release</button>

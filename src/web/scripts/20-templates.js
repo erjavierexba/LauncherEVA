@@ -78,7 +78,7 @@
       const label = labeledInput("Etiqueta", field.label || "");
       const type = labeledSelect(
         "Tipo",
-        ["text", "int", "b_int", "formula", "throw", "cycle", "array", "d4_throw_int", "d6_throw_int", "d8_throw_int", "d10_throw_int", "d12_throw_int", "d20_throw_int"],
+        ["text", "long_text", "csv", "int", "b_int", "formula", "throw", "cycle", "array", "d4_throw_int", "d6_throw_int", "d8_throw_int", "d10_throw_int", "d12_throw_int", "d20_throw_int"],
         field.type || "text"
       );
       const defaultValue = labeledInput("Default", field.defaultValue || "");
@@ -162,12 +162,14 @@
     }
 
     function schemaFieldTypes() {
-      return ["text", "number", "roll", "formula", "cycle", "array"];
+      return ["text", "long_text", "csv", "number", "roll", "formula", "cycle", "array"];
     }
 
     function fieldTypeLabel(type) {
       return {
         text: "Texto",
+        long_text: "Texto largo",
+        csv: "CSV / tags",
         number: "Número",
         roll: "Tirada",
         formula: "Fórmula",
@@ -339,7 +341,10 @@
             if (type.select.value === "array" && !next.fields[index].itemTemplate) {
               next.fields[index].display = "list";
               next.fields[index].itemTemplate = {
-                fields: [{ key: "name", label: "Nombre", type: "text", default: "" }],
+                fields: [
+                  { key: "name", label: "Nombre", type: "text", default: "" },
+                  { key: "description", label: "Descripción", type: "long_text", default: "" },
+                ],
               };
             }
           });
@@ -386,7 +391,7 @@
       wrapper.className = "builder-panel compact-panel";
       const header = document.createElement("div");
       header.className = "builder-panel-title";
-      header.textContent = "Campos de cada elemento";
+      header.textContent = "Composición de cada objeto";
       const add = document.createElement("button");
       add.type = "button";
       add.className = "compact secondary";
@@ -399,6 +404,25 @@
         });
       });
       header.appendChild(add);
+      const weapon = document.createElement("button");
+      weapon.type = "button";
+      weapon.className = "compact secondary";
+      weapon.textContent = "Arma";
+      weapon.addEventListener("click", () => {
+        updateSchemaFromBuilder((schema) => {
+          schema.fields[fieldIndex].display = "list";
+          schema.fields[fieldIndex].itemTemplate = {
+            fields: [
+              { key: "name", label: "Nombre", type: "text", default: "" },
+              { key: "traits", label: "Traits", type: "csv", default: "" },
+              { key: "description", label: "Descripción", type: "long_text", default: "" },
+              { key: "attack", label: "Acierto", type: "formula", formula: "1d20", default: "" },
+              { key: "damage", label: "Daño", type: "formula", formula: "1d8", default: "" },
+            ],
+          };
+        });
+      });
+      header.appendChild(weapon);
       wrapper.appendChild(header);
 
       const itemFields = field.itemTemplate?.fields || [];
@@ -407,7 +431,12 @@
         row.className = "builder-mini-grid";
         const key = labeledInput("Clave", itemField.key || "");
         const label = labeledInput("Etiqueta", itemField.label || "");
-        const type = labeledSelect("Tipo", ["text", "number", "roll"], itemField.type || "text");
+        const type = labeledSelect("Tipo", ["text", "long_text", "csv", "number", "roll", "formula"], itemField.type || "text");
+        [...type.select.options].forEach((option) => {
+          option.textContent = fieldTypeLabel(option.value);
+        });
+        const defaultValue = labeledInput("Default", itemField.default ?? "");
+        const formula = labeledInput("Fórmula", itemField.formula || "");
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "danger";
@@ -421,14 +450,27 @@
         type.select.addEventListener("change", () => {
           updateSchemaFromBuilder((schema) => {
             schema.fields[fieldIndex].itemTemplate.fields[itemIndex].type = type.select.value;
+            if (["formula", "roll"].includes(type.select.value) && !schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula) {
+              schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula = "1d20";
+            }
           });
+        });
+        addBuilderInputListener(defaultValue.input, (schema, value) => {
+          schema.fields[fieldIndex].itemTemplate.fields[itemIndex].default = parseJsonishValue(value);
+        });
+        addBuilderInputListener(formula.input, (schema, value) => {
+          if (value) {
+            schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula = value;
+          } else {
+            delete schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula;
+          }
         });
         remove.addEventListener("click", () => {
           updateSchemaFromBuilder((schema) => {
             schema.fields[fieldIndex].itemTemplate.fields.splice(itemIndex, 1);
           });
         });
-        row.append(key.wrapper, label.wrapper, type.wrapper, remove);
+        row.append(key.wrapper, label.wrapper, type.wrapper, defaultValue.wrapper, formula.wrapper, remove);
         wrapper.appendChild(row);
       });
 
@@ -818,7 +860,7 @@
 
     function previewFieldValue(field) {
       if (field.type === "array") {
-        return "Lista";
+        return `Objetos (${field.itemTemplate?.fields?.length || field.config?.itemFields?.length || 0} campos)`;
       }
       if (field.type === "roll") {
         return field.formula || "1d20";
@@ -956,6 +998,8 @@
               label: itemField.label,
               type: itemField.type === "int" || itemField.type === "b_int" ? "number" : itemField.type,
               default: itemField.defaultValue || "",
+              formula: itemField.formula || "",
+              options: itemField.options || "",
             })),
           };
         }
@@ -1023,6 +1067,8 @@
           type = "throw";
         } else if (field.type === "cycle") {
           type = "cycle";
+        } else if (field.type === "long_text" || field.type === "csv") {
+          type = field.type;
         }
 
         const firstSection = (schema.pages || [])
@@ -1044,6 +1090,8 @@
               label: itemField.label || itemField.key || `Item ${itemIndex + 1}`,
               type: itemField.type === "number" ? "int" : itemField.type || "text",
               defaultValue: itemField.default ?? itemField.value ?? "",
+              formula: itemField.formula || "",
+              options: itemField.options || "",
               sortOrder: (itemIndex + 1) * 10,
             })),
             formula: field.formula || "",

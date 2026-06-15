@@ -348,15 +348,186 @@ function createSheetFieldControl(field, item) {
   const wrapper = document.createElement("div");
   const label = document.createElement("label");
   label.textContent = field.label;
-  if (isFormulaField(field)) {
+  if (field.type === "array") {
+    wrapper.className = "sheet-field-wide";
+    wrapper.append(label, createObjectListField(field, item));
+  } else if (isFormulaField(field)) {
     wrapper.append(label, createFormulaRollButton(field, item));
   } else {
-    const input = document.createElement(field.multiline ? "textarea" : "input");
+    const input = document.createElement(field.multiline || field.type === "long_text" ? "textarea" : "input");
     input.value = field.value || "";
     input.dataset.fieldKey = field.key;
     wrapper.append(label, input);
   }
   return wrapper;
+}
+
+function createObjectListField(field, item) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "object-list";
+  const list = document.createElement("div");
+  list.className = "object-items";
+  const hidden = document.createElement("input");
+  hidden.type = "hidden";
+  hidden.dataset.fieldKey = field.key;
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "secondary";
+  add.textContent = "Añadir";
+
+  let objects = normalizeObjectArray(field.value);
+  const itemFields = normalizeObjectItemFields(field);
+
+  const sync = () => {
+    hidden.value = JSON.stringify(objects);
+  };
+
+  const render = () => {
+    list.innerHTML = "";
+    if (!objects.length) {
+      list.appendChild(empty("Sin elementos."));
+    }
+    objects.forEach((objectValue, objectIndex) => {
+      const card = document.createElement("div");
+      card.className = "object-card";
+      const head = document.createElement("div");
+      head.className = "object-card-head";
+      const title = document.createElement("strong");
+      title.textContent = objectTitle(objectValue, itemFields, objectIndex);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "danger compact";
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        objects.splice(objectIndex, 1);
+        sync();
+        render();
+      });
+      head.append(title, remove);
+      card.appendChild(head);
+
+      const fieldsNode = document.createElement("div");
+      fieldsNode.className = "object-fields";
+      const rollsNode = document.createElement("div");
+      rollsNode.className = "object-rolls";
+
+      for (const itemField of itemFields) {
+        if (isObjectRollField(itemField)) {
+          rollsNode.appendChild(createObjectRollButton(itemField, objectValue, item));
+        } else {
+          fieldsNode.appendChild(createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render));
+        }
+      }
+
+      card.appendChild(fieldsNode);
+      if (rollsNode.children.length) card.appendChild(rollsNode);
+      list.appendChild(card);
+    });
+  };
+
+  add.addEventListener("click", () => {
+    objects.push(Object.fromEntries(itemFields.map((itemField) => [itemField.key, itemField.defaultValue || itemField.default || ""])));
+    sync();
+    render();
+  });
+
+  wrapper.append(list, hidden, add);
+  sync();
+  render();
+  return wrapper;
+}
+
+function createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render) {
+  const label = document.createElement("label");
+  label.textContent = itemField.label || itemField.key;
+  const control = document.createElement(itemField.type === "long_text" ? "textarea" : "input");
+  control.value = objectValue[itemField.key] ?? "";
+  if (itemField.type === "int" || itemField.type === "b_int" || itemField.type === "number") {
+    control.type = "number";
+    control.step = "1";
+  }
+  if (itemField.type === "csv") {
+    control.placeholder = "rápido, sutil, mágico";
+  }
+  control.addEventListener("input", () => {
+    objects[objectIndex] = { ...objects[objectIndex], [itemField.key]: control.value };
+    sync();
+  });
+  control.addEventListener("change", render);
+  label.appendChild(control);
+  if (itemField.type === "csv") {
+    label.appendChild(renderCsvChips(control.value));
+  }
+  return label;
+}
+
+function createObjectRollButton(itemField, objectValue, item) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "formula-roll";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = itemField.label || "Tirada";
+  const result = document.createElement("div");
+  result.className = "dice-result";
+  const formula = itemField.formula || objectValue[itemField.key] || itemField.defaultValue || "1d20";
+  result.textContent = formula;
+  button.addEventListener("click", async () => {
+    try {
+      const parentValues = Object.fromEntries((item.fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
+      const roll = evaluateFormulaExpression(formula, { ...parentValues, ...objectValue });
+      result.innerHTML = `${roll.total}<span class="dice-breakdown">${roll.breakdown}</span>`;
+      addRollHistory({
+        title: `${item.title} · ${objectTitle(objectValue, normalizeObjectItemFields({ config: { itemFields: [] } }), 0)} · ${itemField.label}`,
+        total: roll.total,
+        formula: roll.formula,
+        breakdown: roll.breakdown,
+      });
+      await sendRollToEva(item.title, `${objectTitle(objectValue, [], 0)} · ${itemField.label}`, roll);
+    } catch (error) {
+      result.textContent = error instanceof Error ? error.message : String(error);
+    }
+  });
+  wrapper.append(button, result);
+  return wrapper;
+}
+
+function normalizeObjectArray(value) {
+  if (Array.isArray(value)) return value.filter((entry) => entry && typeof entry === "object");
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry === "object") : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function normalizeObjectItemFields(field) {
+  const itemFields = field.config?.itemFields || field.itemTemplate?.fields || [];
+  return itemFields.length ? itemFields : [{ key: "nombre", label: "Nombre", type: "text", defaultValue: "" }];
+}
+
+function isObjectRollField(field) {
+  return field.type === "formula" || field.type === "throw" || field.type === "roll" || Boolean(field.formula);
+}
+
+function objectTitle(value, itemFields, index) {
+  const titleKey = ["name", "nombre", "title", "titulo"].find((key) => value[key]);
+  if (titleKey) return value[titleKey];
+  const firstTextField = (itemFields || []).find((field) => ["text", "long_text"].includes(field.type) && value[field.key]);
+  return firstTextField ? value[firstTextField.key] : `Objeto ${index + 1}`;
+}
+
+function renderCsvChips(value) {
+  const chips = document.createElement("div");
+  chips.className = "trait-list";
+  String(value || "").split(",").map((part) => part.trim()).filter(Boolean).forEach((part) => {
+    const chip = document.createElement("span");
+    chip.className = "trait-chip";
+    chip.textContent = part;
+    chips.appendChild(chip);
+  });
+  return chips;
 }
 
 async function saveSheet() {
