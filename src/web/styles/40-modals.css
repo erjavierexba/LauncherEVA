@@ -40,7 +40,9 @@
 
     .modal.schema-modal {
       width: min(1280px, 100%);
-      max-height: min(92vh, 860px);
+      height: min(94vh, 900px);
+      max-height: min(94vh, 900px);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       gap: 10px;

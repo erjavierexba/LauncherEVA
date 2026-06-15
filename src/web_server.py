@@ -215,6 +215,14 @@ async def scripts_js(request):
     )
 
 
+async def style_asset(request):
+    filename = Path(request.match_info["filename"]).name
+    path = WEB_STYLES_PATH / filename
+    if not path.exists() or not path.is_file():
+        raise web.HTTPNotFound()
+    return web.FileResponse(path, headers=no_store_headers())
+
+
 async def config_index(request):
     sync_launcher_settings(request.app["context"])
     return web.Response(
@@ -1180,6 +1188,7 @@ async def start_web_server(context):
     app.router.add_get("/api/config", api_config)
     app.router.add_post("/api/client/reset", api_client_reset)
     app.router.add_get("/index.css", index_css)
+    app.router.add_get("/styles/{filename}", style_asset)
     app.router.add_get("/scripts.js", scripts_js)
     app.router.add_get("/favicon.ico", favicon)
     app.router.add_get("/favicon.png", favicon)
