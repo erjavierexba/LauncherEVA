@@ -152,6 +152,30 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(field["config"]["formula"], "d20+level")
         self.assertTrue(field["favorite"])
 
+    def test_select_fields_keep_options_and_default_value(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        result = templates.create_template("test_select", "Test select", {
+            "id": "test_select",
+            "name": "Test select",
+            "constants": {
+                "proficiency": {
+                    "untrained": 0,
+                    "trained": 2,
+                },
+            },
+            "fields": [
+                {"key": "proficiency", "label": "Proficiency", "type": "select", "default": "trained", "options": "proficiency"},
+            ],
+            "pages": [],
+        })
+
+        self.assertTrue(result["ok"])
+        field = result["template"]["fields"][0]
+        self.assertEqual(field["type"], "cycle")
+        self.assertEqual(field["defaultValue"], "trained")
+        self.assertEqual(field["config"]["options"], "proficiency")
+
     def test_template_pages_and_sections_are_preserved(self):
         conn = self.create_connection()
         templates = CharacterTemplatesRepository(conn)

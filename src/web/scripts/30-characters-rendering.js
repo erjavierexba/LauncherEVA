@@ -136,6 +136,10 @@
         return createArrayEditor(field, value);
       }
 
+      if (isSelectField(field)) {
+        return createSelectField(field, value);
+      }
+
       if (isDiceThrowInteger(field.type)) {
         return createDiceThrowInteger(field, value);
       }
@@ -166,11 +170,13 @@
     }
 
     function createEditableFieldInput(field, value = "", onChange = null) {
-      const input = document.createElement("input");
+      const input = isSelectField(field) ? document.createElement("select") : document.createElement("input");
       input.value = Array.isArray(value) ? JSON.stringify(value) : String(value ?? "");
       input.dataset.noBlockSubmit = "true";
 
-      if (field.type === "int") {
+      if (isSelectField(field)) {
+        fillSelectOptions(input, selectOptionsForField(field), value || field.defaultValue || "");
+      } else if (field.type === "int") {
         input.type = "number";
         input.step = "1";
       } else {
@@ -397,11 +403,13 @@
     function createArrayItemInput(field, value, onChange = null) {
       const label = document.createElement("label");
       label.textContent = field.label || field.key;
-      const input = document.createElement(field.type === "long_text" ? "textarea" : "input");
+      const input = isSelectField(field) ? document.createElement("select") : document.createElement(field.type === "long_text" ? "textarea" : "input");
       input.value = value;
       input.placeholder = field.label;
 
-      if (field.type === "int" || field.type === "b_int" || field.type === "number") {
+      if (isSelectField(field)) {
+        fillSelectOptions(input, selectOptionsForField(field), value || field.defaultValue || field.default || "");
+      } else if (field.type === "int" || field.type === "b_int" || field.type === "number") {
         input.type = "number";
         input.step = "1";
       } else {
@@ -417,8 +425,12 @@
       }
 
       input.addEventListener("click", (event) => event.stopPropagation());
-      input.addEventListener("input", () => {
+      const updateValue = () => {
         if (onChange) onChange(input.value);
+      };
+      input.addEventListener("input", updateValue);
+      input.addEventListener("change", () => {
+        updateValue();
       });
       label.appendChild(input);
       if (field.type === "csv") {
@@ -455,6 +467,10 @@
       return field.type === "formula" || field.type === "throw" || field.type === "roll" || Boolean(field.formula);
     }
 
+    function isSelectField(field) {
+      return field?.type === "cycle" || field?.type === "select";
+    }
+
     function objectTitle(value, itemFields, index) {
       const titleKey = ["name", "nombre", "title", "titulo"].find((key) => value[key]);
       if (titleKey) return value[titleKey];
@@ -474,6 +490,54 @@
       return chips;
     }
 
+    function createSelectField(field, value = "") {
+      const select = document.createElement("select");
+      select.dataset.templateField = field.key;
+      fillSelectOptions(select, selectOptionsForField(field), value || field.defaultValue || "");
+      return select;
+    }
+
+    function fillSelectOptions(select, options, selectedValue) {
+      select.innerHTML = "";
+      const normalized = options.length ? options : [{ value: selectedValue || "", label: selectedValue || "Opción" }];
+      normalized.forEach((option) => {
+        const node = document.createElement("option");
+        node.value = option.value;
+        node.textContent = option.label;
+        select.appendChild(node);
+      });
+      if ([...select.options].some((option) => option.value === String(selectedValue))) {
+        select.value = String(selectedValue);
+      }
+    }
+
+    function selectOptionsForField(field) {
+      const source = field.options || field.config?.options || "";
+      const constants = activeTemplate?.schema?.constants || {};
+      const fromConstants = resolveConstantPath(constants, source);
+      if (Array.isArray(fromConstants)) {
+        return fromConstants.map((value) => ({ value: String(value), label: String(value) }));
+      }
+      if (fromConstants && typeof fromConstants === "object") {
+        return Object.keys(fromConstants).map((key) => ({ value: key, label: key }));
+      }
+      return String(source || field.defaultValue || field.default || "")
+        .split(/[,\n|]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((value) => ({ value, label: value }));
+    }
+
+    function resolveConstantPath(constants, path) {
+      if (!path) return null;
+      return String(path)
+        .split(".")
+        .filter(Boolean)
+        .reduce((cursor, key) => (
+          cursor && typeof cursor === "object" && key in cursor ? cursor[key] : null
+        ), constants);
+    }
+
     function createObjectRollButton(field, values = {}) {
       const wrapper = document.createElement("div");
       wrapper.className = "formula-roll";
@@ -488,7 +552,7 @@
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         try {
-          const result = evaluateFormulaExpression(formula, values);
+          const result = evaluateFormulaExpression(formula, values, activeTemplate?.schema?.constants || {});
           output.textContent = `${result.total} · ${result.breakdown}`;
         } catch (error) {
           output.textContent = error instanceof Error ? error.message : String(error);
@@ -533,7 +597,7 @@
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         try {
-          const result = evaluateSheetFormula(formula, personaje?.sheet?.fields || activeTemplate?.fields || []);
+          const result = evaluateSheetFormula(formula, personaje?.sheet?.fields || activeTemplate?.fields || [], personaje?.sheet?.template?.schema || activeTemplate?.schema);
           output.textContent = `${result.total} · ${result.breakdown}`;
           sendDiceRoll(personaje?.playerName || personaje?.username, personaje?.nombre, field, {
             dice: result.diceLabel || "formula",
@@ -552,16 +616,17 @@
       return wrapper;
     }
 
-    function evaluateSheetFormula(rawFormula, fields) {
+    function evaluateSheetFormula(rawFormula, fields, schema = null) {
       const values = Object.fromEntries((fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
-      return evaluateFormulaExpression(rawFormula, values);
+      return evaluateFormulaExpression(rawFormula, values, schema?.constants || {});
     }
 
-    function evaluateFormulaExpression(rawFormula, values = {}) {
+    function evaluateFormulaExpression(rawFormula, values = {}, constants = {}) {
       const formula = String(rawFormula || "").trim();
       if (!formula) throw new Error("Fórmula vacía.");
 
-      const normalized = formula.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
+      const withConstants = resolveFormulaConstants(formula, values, constants);
+      const normalized = withConstants.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
       const tokens = tokenizeFormula(normalized, values);
       const output = [];
       const operators = [];
@@ -617,6 +682,22 @@
         diceLabel: rolls.map((roll) => roll.label).join("+"),
         breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
       };
+    }
+
+    function resolveFormulaConstants(formula, values, constants) {
+      return String(formula || "").replace(/\$([a-zA-Z_][\w.-]*)\[([^\]]+)\]/g, (_match, path, keyExpression) => {
+        const table = resolveConstantPath(constants, path);
+        if (!table || typeof table !== "object") {
+          return "0";
+        }
+        const rawKey = String(keyExpression || "").trim().replace(/^['"]|['"]$/g, "");
+        const valueKey = rawKey.startsWith("*") ? rawKey.slice(1) : rawKey;
+        const resolvedKey = Object.prototype.hasOwnProperty.call(values, valueKey)
+          ? values[valueKey]
+          : valueKey;
+        const resolved = table[String(resolvedKey)];
+        return String(resolved ?? 0);
+      });
     }
 
     function tokenizeFormula(formula, values) {

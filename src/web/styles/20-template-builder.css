@@ -33,9 +33,13 @@
 
     .schema-tools {
       flex: 0 0 auto;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
+    }
+
+    .schema-tools > button {
+      flex: 1 1 150px;
     }
 
     .manual-meta-grid {
@@ -102,12 +106,13 @@
     }
 
     .builder-quick-actions {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
     .builder-quick-actions button {
+      flex: 1 1 112px;
       justify-content: center;
       min-height: 38px;
     }
@@ -393,6 +398,7 @@
     }
 
     .preview-pill,
+    .preview-select,
     .preview-roll-button,
     .preview-step-button {
       display: inline-flex;
@@ -412,6 +418,14 @@
       color: #111419;
       background: var(--gold);
       border-color: var(--gold);
+    }
+
+    .preview-select {
+      padding-right: 22px;
+      border-radius: 6px;
+      background:
+        linear-gradient(45deg, transparent 50%, var(--soft) 50%) right 10px center / 6px 6px no-repeat,
+        #20242b;
     }
 
     .preview-stepper {
@@ -481,6 +495,10 @@
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
+    }
+
+    .preview-object-rolls .preview-roll-button {
+      flex: 1 1 92px;
     }
 
     #templateJsonTextarea {

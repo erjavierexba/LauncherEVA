@@ -12,6 +12,10 @@
       display: grid;
     }
 
+    .modal-backdrop-top {
+      z-index: 14;
+    }
+
     .modal {
       width: min(520px, 100%);
       max-height: min(90vh, 820px);
@@ -68,6 +72,45 @@
 
     .modal.confirm-modal {
       width: min(440px, 100%);
+    }
+
+    .modal.help-modal {
+      width: min(900px, 100%);
+    }
+
+    .help-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .help-block {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+
+    .help-block h3 {
+      margin: 0;
+      color: var(--gold);
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .help-block p {
+      margin: 0;
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .help-block strong {
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
     }
 
     .settings-block {

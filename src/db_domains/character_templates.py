@@ -358,6 +358,7 @@ class CharacterTemplatesRepository:
             config = self._serialize_config({
                 "itemFields": item_fields,
                 "formula": field.get("formula", ""),
+                "options": field.get("options", ""),
             })
             default_value = field.get("default", "[]" if field_type == "array" else "")
 
@@ -404,7 +405,7 @@ class CharacterTemplatesRepository:
         if field_type == "array":
             return "array"
 
-        if field_type == "cycle":
+        if field_type in {"cycle", "select"}:
             return "cycle"
 
         if field_type in {"long_text", "textarea"}:
@@ -1031,6 +1032,7 @@ class CharacterTemplatesRepository:
 
         item_fields = []
         formula = str(config.get("formula", "")).strip()
+        options = str(config.get("options", "")).strip()
 
         for index, field in enumerate(config.get("itemFields") or []):
             if not isinstance(field, dict):
@@ -1052,7 +1054,7 @@ class CharacterTemplatesRepository:
                 "sortOrder": self._to_int(field.get("sortOrder"), (index + 1) * 10),
             })
 
-        return json.dumps({"itemFields": item_fields, "formula": formula}, ensure_ascii=False)
+        return json.dumps({"itemFields": item_fields, "formula": formula, "options": options}, ensure_ascii=False)
 
     def _parse_config(self, raw_config):
         try:
@@ -1069,6 +1071,7 @@ class CharacterTemplatesRepository:
 
         return {
             "formula": str(config.get("formula", "")),
+            "options": str(config.get("options", "")),
             "itemFields": [
                 {
                     "key": str(field.get("key", "")),

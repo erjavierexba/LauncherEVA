@@ -27,6 +27,8 @@
     document.getElementById("activateTemplateButton").addEventListener("click", () => runAction(activateTemplate));
     document.getElementById("deleteTemplateButton").addEventListener("click", () => runAction(deleteTemplate));
     document.getElementById("closeTemplateJsonButton").addEventListener("click", closeTemplateJsonModal);
+    document.getElementById("openTemplateHelpButton").addEventListener("click", openTemplateHelpModal);
+    document.getElementById("closeTemplateHelpButton").addEventListener("click", closeTemplateHelpModal);
     templateBuilderTabButton.addEventListener("click", () => setTemplateBuilderTab("builder"));
     templateJsonTabButton.addEventListener("click", () => setTemplateBuilderTab("json"));
     document.getElementById("builderAddFieldButton").addEventListener("click", () => addBuilderField("text"));

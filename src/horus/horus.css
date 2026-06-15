@@ -440,8 +440,17 @@ h2 {
 }
 
 .object-rolls {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.object-rolls .formula-roll {
+  flex: 1 1 170px;
+}
+
+.object-rolls .formula-roll > button {
+  min-width: 0;
 }
 
 .trait-list {

@@ -89,6 +89,7 @@
         <button id="templateBuilderTabButton" type="button">Builder visual</button>
         <button id="templateJsonTabButton" type="button" class="secondary">JSON avanzado</button>
         <button id="validateTemplateJsonButton" type="button" class="secondary">Validar</button>
+        <button id="openTemplateHelpButton" type="button" class="secondary">Ayuda</button>
       </div>
       <div id="templateBuilderPanel" class="template-builder">
         <div class="template-builder-workbench">
@@ -99,11 +100,11 @@
             <div class="builder-quick-actions">
               <button type="button" class="secondary" data-builder-preset="text">Texto</button>
               <button type="button" class="secondary" data-builder-preset="number">Número</button>
+              <button type="button" class="secondary" data-builder-preset="select">Selector</button>
               <button type="button" class="secondary" data-builder-preset="resource">Recurso</button>
               <button type="button" class="secondary" data-builder-preset="roll">Tirada</button>
               <button type="button" class="secondary" data-builder-preset="notes">Notas</button>
               <button type="button" class="secondary" data-builder-preset="object">Objeto</button>
-              <button type="button" class="secondary" data-builder-preset="weapon">Arma</button>
             </div>
           </div>
           <div class="builder-column">
@@ -146,6 +147,37 @@
       <div id="templateJsonStatus" class="schema-status"></div>
       <div class="command-actions">
         <button id="saveTemplateJsonButton">Guardar plantilla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="templateHelpModal" class="modal-backdrop modal-backdrop-top" aria-hidden="true">
+    <div class="modal help-modal">
+      <div class="modal-header">
+        <h2>Ayuda del builder</h2>
+        <button id="closeTemplateHelpButton" class="compact secondary">Cerrar</button>
+      </div>
+      <div class="help-grid">
+        <section class="help-block">
+          <h3>Constantes</h3>
+          <p>Sirven para tablas reutilizables, como niveles de competencia. Añade valores en Reglas y tablas con nombres tipo <strong>proficiency.trained</strong> y valores numéricos o de texto.</p>
+          <p>Un selector puede usar una constante escribiendo el nombre de la tabla en Opciones, por ejemplo <strong>proficiency</strong>.</p>
+        </section>
+        <section class="help-block">
+          <h3>Valores fijos</h3>
+          <p>Para un selector sin constantes, escribe las opciones separadas por coma: <strong>novato, veterano, maestro</strong>.</p>
+          <p>El Valor inicial debe coincidir con una de esas opciones, por ejemplo <strong>veterano</strong>.</p>
+        </section>
+        <section class="help-block">
+          <h3>Listas y objetos</h3>
+          <p>Un campo Objeto crea una lista de elementos repetibles. Dentro puedes añadir texto, CSV/tags, descripción, selectores y tiradas.</p>
+          <p>CSV significa texto separado por comas, útil para traits, etiquetas o estados.</p>
+        </section>
+        <section class="help-block">
+          <h3>Fórmulas</h3>
+          <p>Puedes usar dados como <strong>1d20+3</strong> y campos por nombre como <strong>1d20 + fuerza</strong>. Si un campo guarda <strong>d4</strong>, al usarse en una fórmula se lanza.</p>
+          <p>Las constantes se consultan con <strong>$tabla[campo]</strong>, por ejemplo <strong>$proficiency[proficiency]</strong> o <strong>$proficiency[*proficiency]</strong>.</p>
+        </section>
       </div>
     </div>
   </div>

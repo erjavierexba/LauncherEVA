@@ -48,6 +48,7 @@
     const templateJsonPanel = document.getElementById("templateJsonPanel");
     const templateBuilderTabButton = document.getElementById("templateBuilderTabButton");
     const templateJsonTabButton = document.getElementById("templateJsonTabButton");
+    const templateHelpModal = document.getElementById("templateHelpModal");
     const builderFieldsList = document.getElementById("builderFieldsList");
     const builderConstantsList = document.getElementById("builderConstantsList");
     const builderPagesList = document.getElementById("builderPagesList");

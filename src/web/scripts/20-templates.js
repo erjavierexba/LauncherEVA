@@ -162,7 +162,7 @@
     }
 
     function schemaFieldTypes() {
-      return ["text", "long_text", "csv", "number", "roll", "formula", "cycle", "array"];
+      return ["text", "long_text", "csv", "number", "select", "roll", "formula", "array"];
     }
 
     function fieldTypeLabel(type) {
@@ -171,9 +171,10 @@
         long_text: "Texto largo",
         csv: "CSV / tags",
         number: "Número",
+        select: "Selector",
         roll: "Tirada",
         formula: "Fórmula",
-        cycle: "Ciclo",
+        cycle: "Selector",
         array: "Lista",
       }[type] || type;
     }
@@ -347,6 +348,10 @@
                 ],
               };
             }
+            if (type.select.value === "select" && !next.fields[index].options) {
+              next.fields[index].options = "opcion_1, opcion_2";
+              next.fields[index].default = "opcion_1";
+            }
           });
         });
         addBuilderInputListener(defaultValue.input, (next, value) => {
@@ -404,11 +409,11 @@
         });
       });
       header.appendChild(add);
-      const weapon = document.createElement("button");
-      weapon.type = "button";
-      weapon.className = "compact secondary";
-      weapon.textContent = "Arma";
-      weapon.addEventListener("click", () => {
+      const baseObject = document.createElement("button");
+      baseObject.type = "button";
+      baseObject.className = "compact secondary";
+      baseObject.textContent = "Base con tiradas";
+      baseObject.addEventListener("click", () => {
         updateSchemaFromBuilder((schema) => {
           schema.fields[fieldIndex].display = "list";
           schema.fields[fieldIndex].itemTemplate = {
@@ -416,13 +421,13 @@
               { key: "name", label: "Nombre", type: "text", default: "" },
               { key: "traits", label: "Traits", type: "csv", default: "" },
               { key: "description", label: "Descripción", type: "long_text", default: "" },
-              { key: "attack", label: "Acierto", type: "formula", formula: "1d20", default: "" },
-              { key: "damage", label: "Daño", type: "formula", formula: "1d8", default: "" },
+              { key: "roll_1", label: "Tirada 1", type: "formula", formula: "1d20", default: "" },
+              { key: "roll_2", label: "Tirada 2", type: "formula", formula: "1d6", default: "" },
             ],
           };
         });
       });
-      header.appendChild(weapon);
+      header.appendChild(baseObject);
       wrapper.appendChild(header);
 
       const itemFields = field.itemTemplate?.fields || [];
@@ -431,11 +436,12 @@
         row.className = "builder-mini-grid";
         const key = labeledInput("ID", itemField.key || "");
         const label = labeledInput("Nombre", itemField.label || "");
-        const type = labeledSelect("Tipo", ["text", "long_text", "csv", "number", "roll", "formula"], itemField.type || "text");
+        const type = labeledSelect("Tipo", ["text", "long_text", "csv", "number", "select", "roll", "formula"], itemField.type || "text");
         [...type.select.options].forEach((option) => {
           option.textContent = fieldTypeLabel(option.value);
         });
         const defaultValue = labeledInput("Valor inicial", itemField.default ?? "");
+        const options = labeledInput("Opciones", itemField.options || "");
         const formula = labeledInput("Fórmula", itemField.formula || "");
         const remove = document.createElement("button");
         remove.type = "button";
@@ -453,10 +459,20 @@
             if (["formula", "roll"].includes(type.select.value) && !schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula) {
               schema.fields[fieldIndex].itemTemplate.fields[itemIndex].formula = "1d20";
             }
+            if (type.select.value === "select" && !schema.fields[fieldIndex].itemTemplate.fields[itemIndex].options) {
+              schema.fields[fieldIndex].itemTemplate.fields[itemIndex].options = "opcion_1, opcion_2";
+            }
           });
         });
         addBuilderInputListener(defaultValue.input, (schema, value) => {
           schema.fields[fieldIndex].itemTemplate.fields[itemIndex].default = parseJsonishValue(value);
+        });
+        addBuilderInputListener(options.input, (schema, value) => {
+          if (value) {
+            schema.fields[fieldIndex].itemTemplate.fields[itemIndex].options = value;
+          } else {
+            delete schema.fields[fieldIndex].itemTemplate.fields[itemIndex].options;
+          }
         });
         addBuilderInputListener(formula.input, (schema, value) => {
           if (value) {
@@ -470,7 +486,7 @@
             schema.fields[fieldIndex].itemTemplate.fields.splice(itemIndex, 1);
           });
         });
-        row.append(key.wrapper, label.wrapper, type.wrapper, defaultValue.wrapper, formula.wrapper, remove);
+        row.append(key.wrapper, label.wrapper, type.wrapper, defaultValue.wrapper, options.wrapper, formula.wrapper, remove);
         wrapper.appendChild(row);
       });
 
@@ -648,7 +664,7 @@
 
     function builderFieldPreset(preset, schema) {
       const nextIndex = (schema.fields || []).length + 1;
-      const baseKey = uniqueSchemaFieldKey(schema, preset === "weapon" ? "armas" : preset === "object" ? "objetos" : `campo_${nextIndex}`);
+      const baseKey = uniqueSchemaFieldKey(schema, preset === "object" ? "objetos" : `campo_${nextIndex}`);
       const presets = {
         text: {
           key: baseKey,
@@ -664,6 +680,14 @@
           default: 0,
           editable: true,
           display: "stepper",
+        },
+        select: {
+          key: uniqueSchemaFieldKey(schema, "proficiency"),
+          label: "Proficiency",
+          type: "select",
+          default: "trained",
+          options: "proficiency",
+          editable: true,
         },
         resource: {
           key: uniqueSchemaFieldKey(schema, "recurso"),
@@ -700,22 +724,8 @@
               { key: "name", label: "Nombre", type: "text", default: "" },
               { key: "traits", label: "Traits", type: "csv", default: "" },
               { key: "description", label: "Descripción", type: "long_text", default: "" },
-            ],
-          },
-        },
-        weapon: {
-          key: uniqueSchemaFieldKey(schema, "armas"),
-          label: "Armas",
-          type: "array",
-          display: "list",
-          editable: true,
-          itemTemplate: {
-            fields: [
-              { key: "name", label: "Nombre", type: "text", default: "" },
-              { key: "traits", label: "Traits", type: "csv", default: "" },
-              { key: "description", label: "Descripción", type: "long_text", default: "" },
-              { key: "attack", label: "Acierto", type: "formula", formula: "1d20", default: "" },
-              { key: "damage", label: "Daño", type: "formula", formula: "1d8", default: "" },
+              { key: "roll_1", label: "Tirada 1", type: "formula", formula: "1d20", default: "" },
+              { key: "roll_2", label: "Tirada 2", type: "formula", formula: "1d6", default: "" },
             ],
           },
         },
@@ -937,14 +947,14 @@
         for (const fieldKey of section.fields || []) {
           const field = fieldsByKey.get(fieldKey);
           if (!field) continue;
-          sectionNode.appendChild(createPreviewField(field));
+          sectionNode.appendChild(createPreviewField(field, schema));
         }
 
         templatePhonePreview.appendChild(sectionNode);
       }
     }
 
-    function createPreviewField(field) {
+    function createPreviewField(field, schema) {
       const row = document.createElement("div");
       row.className = "preview-field";
       if (field.type === "array" || field.type === "long_text") {
@@ -955,14 +965,14 @@
       label.textContent = field.label || field.key;
       const value = document.createElement("div");
       value.className = "preview-field-value";
-      value.appendChild(createPreviewControl(field));
+      value.appendChild(createPreviewControl(field, schema));
       row.append(label, value);
       return row;
     }
 
-    function createPreviewControl(field) {
+    function createPreviewControl(field, schema) {
       if (field.type === "array") {
-        return createPreviewObject(field);
+        return createPreviewObject(field, schema);
       }
 
       if (field.type === "roll") {
@@ -979,11 +989,8 @@
         return button;
       }
 
-      if (field.type === "cycle") {
-        const pill = document.createElement("span");
-        pill.className = "preview-pill";
-        pill.textContent = field.default || field.options || "Opción";
-        return pill;
+      if (field.type === "select" || field.type === "cycle") {
+        return createPreviewSelect(field, schema);
       }
 
       if (field.type === "long_text") {
@@ -1033,7 +1040,7 @@
       return input;
     }
 
-    function createPreviewObject(field) {
+    function createPreviewObject(field, schema) {
       const itemFields = field.itemTemplate?.fields || field.config?.itemFields || [];
       const card = document.createElement("div");
       card.className = "preview-object";
@@ -1071,6 +1078,15 @@
       return card;
     }
 
+    function createPreviewSelect(field, schema) {
+      const options = selectOptionsForSchemaField(field, schema);
+      const selected = field.default || field.defaultValue || options[0]?.value || "opción";
+      const select = document.createElement("span");
+      select.className = "preview-select";
+      select.textContent = options.find((option) => String(option.value) === String(selected))?.label || selected;
+      return select;
+    }
+
     function previewObjectTitle(itemFields) {
       const nameField = itemFields.find((itemField) => ["name", "nombre", "title", "titulo"].includes(itemField.key));
       return nameField?.default || nameField?.defaultValue || nameField?.label || "Objeto";
@@ -1090,6 +1106,33 @@
           list.appendChild(chip);
         });
       return list;
+    }
+
+    function selectOptionsForSchemaField(field, schema) {
+      const source = field.options || field.config?.options || "";
+      const constants = schema?.constants || {};
+      const fromConstants = resolveConstantPath(constants, source);
+      if (Array.isArray(fromConstants)) {
+        return fromConstants.map((value) => ({ value: String(value), label: String(value) }));
+      }
+      if (fromConstants && typeof fromConstants === "object") {
+        return Object.keys(fromConstants).map((key) => ({ value: key, label: key }));
+      }
+      return String(source || field.default || field.defaultValue || "")
+        .split(/[,\n|]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((value) => ({ value, label: value }));
+    }
+
+    function resolveConstantPath(constants, path) {
+      if (!path) return null;
+      return String(path)
+        .split(".")
+        .filter(Boolean)
+        .reduce((cursor, key) => (
+          cursor && typeof cursor === "object" && key in cursor ? cursor[key] : null
+        ), constants);
     }
 
     function readTemplateFieldsEditor() {
@@ -1223,8 +1266,9 @@
         }
 
         if (field.type === "cycle") {
-          schemaField.type = "cycle";
-          schemaField.options = field.defaultValue || "";
+          schemaField.type = "select";
+          schemaField.options = field.config?.options || field.defaultValue || "";
+          schemaField.default = field.config?.options ? field.defaultValue : "";
         }
 
         if (field.type === "throw" || /^d[1-9]\d*_throw_int$/.test(field.type || "")) {
@@ -1283,7 +1327,7 @@
           type = "array";
         } else if (field.type === "roll") {
           type = "throw";
-        } else if (field.type === "cycle") {
+        } else if (field.type === "cycle" || field.type === "select") {
           type = "cycle";
         } else if (field.type === "long_text" || field.type === "csv") {
           type = field.type;
@@ -1299,20 +1343,21 @@
           key: field.key || `field_${index + 1}`,
           label: field.label || field.key || `Campo ${index + 1}`,
           type,
-          defaultValue: field.type === "cycle" ? (field.options || field.default || "") : (field.default ?? field.value ?? ""),
+          defaultValue: field.type === "cycle" || field.type === "select" ? (field.default ?? field.value ?? "") : (field.default ?? field.value ?? ""),
           group: firstSection?.label || "",
           favorite: Boolean(field.favorite),
           config: {
             itemFields: itemFields.map((itemField, itemIndex) => ({
               key: itemField.key || `item_${itemIndex + 1}`,
               label: itemField.label || itemField.key || `Item ${itemIndex + 1}`,
-              type: itemField.type === "number" ? "int" : itemField.type || "text",
+              type: itemField.type === "number" ? "int" : itemField.type === "select" ? "cycle" : itemField.type || "text",
               defaultValue: itemField.default ?? itemField.value ?? "",
               formula: itemField.formula || "",
               options: itemField.options || "",
               sortOrder: (itemIndex + 1) * 10,
             })),
             formula: field.formula || "",
+            options: field.options || "",
           },
           sortOrder: (index + 1) * 10,
         };
@@ -1400,6 +1445,16 @@
     function closeTemplateJsonModal() {
       templateJsonModal.classList.remove("open");
       templateJsonModal.setAttribute("aria-hidden", "true");
+    }
+
+    function openTemplateHelpModal() {
+      templateHelpModal.classList.add("open");
+      templateHelpModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeTemplateHelpModal() {
+      templateHelpModal.classList.remove("open");
+      templateHelpModal.setAttribute("aria-hidden", "true");
     }
 
     function fillTemplateFieldsFromSchema(schema) {

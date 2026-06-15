@@ -351,6 +351,8 @@ function createSheetFieldControl(field, item) {
   if (field.type === "array") {
     wrapper.className = "sheet-field-wide";
     wrapper.append(label, createObjectListField(field, item));
+  } else if (isSelectField(field)) {
+    wrapper.append(label, createSelectField(field, field.value || field.defaultValue || "", item.schema));
   } else if (isFormulaField(field)) {
     wrapper.append(label, createFormulaRollButton(field, item));
   } else {
@@ -415,7 +417,7 @@ function createObjectListField(field, item) {
         if (isObjectRollField(itemField)) {
           rollsNode.appendChild(createObjectRollButton(itemField, objectValue, item));
         } else {
-          fieldsNode.appendChild(createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render));
+          fieldsNode.appendChild(createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render, item.schema));
         }
       }
 
@@ -437,11 +439,16 @@ function createObjectListField(field, item) {
   return wrapper;
 }
 
-function createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render) {
+function createObjectFieldInput(itemField, objectValue, objectIndex, objects, sync, render, schema = null) {
   const label = document.createElement("label");
   label.textContent = itemField.label || itemField.key;
-  const control = document.createElement(itemField.type === "long_text" ? "textarea" : "input");
+  const control = isSelectField(itemField)
+    ? document.createElement("select")
+    : document.createElement(itemField.type === "long_text" ? "textarea" : "input");
   control.value = objectValue[itemField.key] ?? "";
+  if (isSelectField(itemField)) {
+    fillSelectOptions(control, selectOptionsForField(itemField, schema), control.value || itemField.defaultValue || itemField.default || "");
+  }
   if (itemField.type === "int" || itemField.type === "b_int" || itemField.type === "number") {
     control.type = "number";
     control.step = "1";
@@ -449,11 +456,15 @@ function createObjectFieldInput(itemField, objectValue, objectIndex, objects, sy
   if (itemField.type === "csv") {
     control.placeholder = "rápido, sutil, mágico";
   }
-  control.addEventListener("input", () => {
+  const updateValue = () => {
     objects[objectIndex] = { ...objects[objectIndex], [itemField.key]: control.value };
     sync();
+  };
+  control.addEventListener("input", updateValue);
+  control.addEventListener("change", () => {
+    updateValue();
+    render();
   });
-  control.addEventListener("change", render);
   label.appendChild(control);
   if (itemField.type === "csv") {
     label.appendChild(renderCsvChips(control.value));
@@ -475,7 +486,7 @@ function createObjectRollButton(itemField, objectValue, item) {
   button.addEventListener("click", async () => {
     try {
       const parentValues = Object.fromEntries((item.fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
-      const roll = evaluateFormulaExpression(formula, { ...parentValues, ...objectValue });
+      const roll = evaluateFormulaExpression(formula, { ...parentValues, ...objectValue }, item.schema?.constants || {});
       result.innerHTML = `${roll.total}<span class="dice-breakdown">${roll.breakdown}</span>`;
       addRollHistory({
         title: `${item.title} · ${objectTitle(objectValue, normalizeObjectItemFields({ config: { itemFields: [] } }), 0)} · ${itemField.label}`,
@@ -511,6 +522,10 @@ function isObjectRollField(field) {
   return field.type === "formula" || field.type === "throw" || field.type === "roll" || Boolean(field.formula);
 }
 
+function isSelectField(field) {
+  return field?.type === "cycle" || field?.type === "select";
+}
+
 function objectTitle(value, itemFields, index) {
   const titleKey = ["name", "nombre", "title", "titulo"].find((key) => value[key]);
   if (titleKey) return value[titleKey];
@@ -528,6 +543,54 @@ function renderCsvChips(value) {
     chips.appendChild(chip);
   });
   return chips;
+}
+
+function createSelectField(field, value = "", schema = null) {
+  const select = document.createElement("select");
+  select.dataset.fieldKey = field.key;
+  fillSelectOptions(select, selectOptionsForField(field, schema), value || field.defaultValue || "");
+  return select;
+}
+
+function fillSelectOptions(select, options, selectedValue) {
+  select.innerHTML = "";
+  const normalized = options.length ? options : [{ value: selectedValue || "", label: selectedValue || "Opción" }];
+  normalized.forEach((option) => {
+    const node = document.createElement("option");
+    node.value = option.value;
+    node.textContent = option.label;
+    select.appendChild(node);
+  });
+  if ([...select.options].some((option) => option.value === String(selectedValue))) {
+    select.value = String(selectedValue);
+  }
+}
+
+function selectOptionsForField(field, schema = null) {
+  const source = field.options || field.config?.options || "";
+  const constants = schema?.constants || {};
+  const fromConstants = resolveConstantPath(constants, source);
+  if (Array.isArray(fromConstants)) {
+    return fromConstants.map((value) => ({ value: String(value), label: String(value) }));
+  }
+  if (fromConstants && typeof fromConstants === "object") {
+    return Object.keys(fromConstants).map((key) => ({ value: key, label: key }));
+  }
+  return String(source || field.defaultValue || field.default || "")
+    .split(/[,\n|]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((value) => ({ value, label: value }));
+}
+
+function resolveConstantPath(constants, path) {
+  if (!path) return null;
+  return String(path)
+    .split(".")
+    .filter(Boolean)
+    .reduce((cursor, key) => (
+      cursor && typeof cursor === "object" && key in cursor ? cursor[key] : null
+    ), constants);
 }
 
 async function saveSheet() {
@@ -862,7 +925,7 @@ function createFormulaRollButton(field, item) {
 
   button.addEventListener("click", async () => {
     try {
-      const roll = evaluateSheetFormula(formula, item.fields || []);
+      const roll = evaluateSheetFormula(formula, item.fields || [], item.schema);
       result.innerHTML = `${roll.total}<span class="dice-breakdown">${roll.breakdown}</span>`;
       addRollHistory({
         title: `${item.title} · ${field.label}`,
@@ -880,20 +943,21 @@ function createFormulaRollButton(field, item) {
   return wrapper;
 }
 
-function evaluateSheetFormula(rawFormula, fields) {
+function evaluateSheetFormula(rawFormula, fields, schema = null) {
   const values = Object.fromEntries((fields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
-  return evaluateFormulaExpression(rawFormula, values);
+  return evaluateFormulaExpression(rawFormula, values, schema?.constants || {});
 }
 
 function rollFormula(rawFormula) {
   return evaluateFormulaExpression(rawFormula, {});
 }
 
-function evaluateFormulaExpression(rawFormula, values = {}) {
+function evaluateFormulaExpression(rawFormula, values = {}, constants = {}) {
   const formula = String(rawFormula || "").trim();
   if (!formula) throw new Error("Escribe una fórmula.");
 
-  const normalized = formula.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
+  const withConstants = resolveFormulaConstants(formula, values, constants);
+  const normalized = withConstants.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
   const tokens = tokenizeFormula(normalized, values);
   const output = [];
   const operators = [];
@@ -949,6 +1013,22 @@ function evaluateFormulaExpression(rawFormula, values = {}) {
     diceLabel: rolls.map((roll) => roll.label).join("+") || "formula",
     breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
   };
+}
+
+function resolveFormulaConstants(formula, values, constants) {
+  return String(formula || "").replace(/\$([a-zA-Z_][\w.-]*)\[([^\]]+)\]/g, (_match, path, keyExpression) => {
+    const table = resolveConstantPath(constants, path);
+    if (!table || typeof table !== "object") {
+      return "0";
+    }
+    const rawKey = String(keyExpression || "").trim().replace(/^['"]|['"]$/g, "");
+    const valueKey = rawKey.startsWith("*") ? rawKey.slice(1) : rawKey;
+    const resolvedKey = Object.prototype.hasOwnProperty.call(values, valueKey)
+      ? values[valueKey]
+      : valueKey;
+    const resolved = table[String(resolvedKey)];
+    return String(resolved ?? 0);
+  });
 }
 
 function tokenizeFormula(formula, values) {
