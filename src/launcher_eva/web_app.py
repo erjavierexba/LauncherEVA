@@ -45,6 +45,12 @@ ALLOWED_MEDIA_EXTENSIONS = {
     ".webm",
     ".pdf",
 }
+ALLOWED_THEME_BACKGROUND_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+}
 FAVICON_PATH = Path("src") / "web" / "assets" / "eva_favicon.png"
 
 THEME_PRESETS = {
@@ -55,6 +61,7 @@ THEME_PRESETS = {
             "background": "#0d0f12",
             "surface": "#1a1f27",
             "surfaceAlt": "#111419",
+            "inputBackground": "#0f141b",
             "text": "#ededed",
             "muted": "#9fa7b3",
             "accent": "#c9a24a",
@@ -70,6 +77,7 @@ THEME_PRESETS = {
             "background": "#f4f7fb",
             "surface": "#ffffff",
             "surfaceAlt": "#edf2f7",
+            "inputBackground": "#ffffff",
             "text": "#15202b",
             "muted": "#657786",
             "accent": "#2f80ed",
@@ -85,6 +93,7 @@ THEME_PRESETS = {
             "background": "#120f18",
             "surface": "#211b2b",
             "surfaceAlt": "#17111f",
+            "inputBackground": "#120f18",
             "text": "#f1ecff",
             "muted": "#b4a7ca",
             "accent": "#d4a84f",
@@ -148,6 +157,7 @@ def default_settings() -> dict:
         "web_port": "8000",
         "client_port": "8080",
         "microphone_device": "",
+        "db_max_backups": "10",
     }
 
 
@@ -225,6 +235,18 @@ def render_theme_input(key: str, value: str) -> str:
     if key in {"title", "radius"}:
         return f'<label>{h(key)}<input name="{h(key)}" value="{h(value)}"></label>'
 
+    if key == "background":
+        color_value = value if is_hex_color(value) else "#000000"
+        return (
+            f'<label>{h(key)}'
+            f'<span class="color-field">'
+            f'<input class="color-picker" type="color" value="{h(color_value)}" data-color-target="{h(key)}">'
+            f'<input class="color-text" name="{h(key)}" value="{h(value)}" data-color-name="{h(key)}">'
+            f'</span>'
+            f'<input type="file" name="background_file" accept="image/png,image/jpeg,image/webp">'
+            f'</label>'
+        )
+
     color_value = value if is_hex_color(value) else "#000000"
     return (
         f'<label>{h(key)}'
@@ -296,6 +318,7 @@ class LauncherState:
             "web_port",
             "client_port",
             "microphone_device",
+            "db_max_backups",
         ]:
             if key in form:
                 self.settings[key] = form[key].strip()
@@ -310,7 +333,10 @@ class LauncherState:
         return self.eva_path() / "config" / "eva.config.json"
 
     def media_root(self) -> Path:
-        return app_root() / "media"
+        return self.role_repository_root() / "media"
+
+    def role_repository_root(self) -> Path:
+        return app_root() / "roles" / app_slug(self.role_name())
 
     def favicon_path(self) -> Path:
         return app_root() / FAVICON_PATH
@@ -332,8 +358,10 @@ class LauncherState:
 
     def command_environment(self) -> dict[str, str]:
         env = os.environ.copy()
-        env["EVA_DB_PATH"] = str(runtime_sqlite_path())
-        env["EVA_MEDIA_ROOT"] = str(app_root() / "media")
+        self.role_repository_root().mkdir(parents=True, exist_ok=True)
+        env["EVA_DB_PATH"] = str(self.role_repository_root() / "eva.sqlite3")
+        env["EVA_DB_MAX_BACKUPS"] = str(self.db_max_backups())
+        env["EVA_MEDIA_ROOT"] = str(self.media_root())
         return env
 
     def run_command(self, command: list[str], cwd: Path, label: str) -> int:
@@ -583,13 +611,37 @@ class LauncherState:
         self.eva_process = None
         self.log("EVA detenida.")
 
-    def save_theme(self, form: dict[str, str]) -> None:
-        keys = ["title", "background", "surface", "surfaceAlt", "text", "muted", "accent", "primary", "danger", "radius"]
+    def save_theme(self, form: dict[str, str], background_upload: dict | None = None) -> None:
+        keys = ["title", "background", "surface", "surfaceAlt", "inputBackground", "text", "muted", "accent", "primary", "danger", "radius"]
         config = self.eva_config()
-        config["theme"] = {key: form.get(key, "").strip() for key in keys}
+        theme = {key: form.get(key, "").strip() for key in keys}
+        if background_upload:
+            uploaded_background = self.set_theme_background_upload(
+                background_upload["path"],
+                background_upload["filename"],
+            )
+            if uploaded_background:
+                theme["background"] = uploaded_background
+        config["theme"] = theme
         self.save_eva_config(config)
         self.log("Tema guardado en EVA.")
         self.apply_release_configuration()
+
+    def set_theme_background_upload(self, upload_path: Path, original_name: str) -> str:
+        extension = Path(original_name).suffix.lower()
+        if extension not in ALLOWED_THEME_BACKGROUND_EXTENSIONS:
+            self.log(f"Fondo no permitido: {extension}")
+            return ""
+
+        assets_root = app_root() / "src" / "web" / "assets"
+        assets_root.mkdir(parents=True, exist_ok=True)
+        for old_background in assets_root.glob("theme_background.*"):
+            if old_background.is_file():
+                old_background.unlink()
+
+        destination = assets_root / f"theme_background{extension}"
+        shutil.copyfile(upload_path, destination)
+        return f"/assets/{destination.name}?v={int(time.time())}"
 
     def apply_preset(self, preset: str) -> None:
         if preset not in THEME_PRESETS:
@@ -723,6 +775,14 @@ class LauncherState:
     def app_subtitle(self) -> str:
         return self.settings.get("app_subtitle", "").strip() or "EVA mantiene el vinculo abierto"
 
+    def db_max_backups(self) -> int:
+        try:
+            value = int(self.settings.get("db_max_backups", "10"))
+        except (TypeError, ValueError):
+            return 10
+
+        return max(0, value)
+
     def apply_release_configuration(self) -> None:
         role_name = self.role_name()
         config = self.eva_config()
@@ -735,11 +795,15 @@ class LauncherState:
         config["project"] = {
             "roleName": role_name,
             "appSubtitle": self.app_subtitle(),
+            "repository": str(Path("roles") / app_slug(role_name)),
         }
         config["server"] = {
             "host": "0.0.0.0",
             "evaPort": parse_port(self.settings.get("web_port"), 8000),
             "clientPort": parse_port(self.settings.get("client_port"), 8080),
+        }
+        config["database"] = {
+            "maxBackups": self.db_max_backups(),
         }
         microphone_id = self.settings.get("microphone_device", "").strip()
         config["audio"] = {
@@ -785,7 +849,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path in {"/media/upload", "/intro/upload", "/favicon/upload"}:
+        if path in {"/media/upload", "/intro/upload", "/favicon/upload", "/theme"}:
             form, files = self.multipart()
         else:
             form = self.form()
@@ -804,7 +868,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/stop-eva":
             STATE.stop_eva()
         elif path == "/theme":
-            STATE.save_theme(form)
+            upload = files.get("background_file")
+            STATE.save_theme(form, upload)
+            if upload:
+                upload["path"].unlink(missing_ok=True)
         elif path == "/theme/preset":
             STATE.apply_preset(form.get("preset", "eva"))
         elif path == "/apply-release":
@@ -937,6 +1004,7 @@ def render_page() -> str:
     media = STATE.media_items()
     settings = STATE.settings
     role_name = settings.get("role_name", "EVA")
+    role_repository = STATE.role_repository_root()
     eva_running = STATE.embedded_mode or (STATE.eva_process is not None and STATE.eva_process.poll() is None)
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
@@ -951,7 +1019,7 @@ def render_page() -> str:
     )
     theme_inputs = "".join(
         render_theme_input(key, str(theme.get(key, "")))
-        for key in ["title", "background", "surface", "surfaceAlt", "text", "muted", "accent", "primary", "danger", "radius"]
+        for key in ["title", "background", "surface", "surfaceAlt", "inputBackground", "text", "muted", "accent", "primary", "danger", "radius"]
     )
     user_rows = "".join(
         f"<tr><td>{h(user['name'])}</td><td>{h(', '.join(user.get('aliases', [])))}</td>"
@@ -1052,9 +1120,11 @@ def render_page() -> str:
       <h2>Rol y release</h2>
       <form class="grid" method="post" action="/settings">
         <label>Título del rol visible para jugadores<input name="role_name" value="{h(role_name)}"></label>
+        <label class="span2">Repositorio del rol<input value="{h(role_repository)}" readonly></label>
         <label class="span2">Subtítulo app<input name="app_subtitle" value="{h(settings.get('app_subtitle', 'EVA mantiene el vinculo abierto'))}"></label>
         <label>Puerto EVA/configurador<input name="web_port" value="{h(settings.get('web_port', '8000'))}"></label>
         <label>Puerto web de jugadores<input name="client_port" value="{h(settings.get('client_port', '8080'))}"></label>
+        <label>Máximo backups SQLite<input name="db_max_backups" type="number" min="0" step="1" value="{h(settings.get('db_max_backups', '10'))}"></label>
         <div class="client-share">
           <span>La aplicación para los jugadores está desplegada en:</span>
           <strong id="configClientAddress">{h(client_address)}</strong>
@@ -1081,7 +1151,7 @@ def render_page() -> str:
     <section>
       <h2>Tema EVA</h2>
       <form class="actions" method="post" action="/theme/preset">{preset_buttons}</form>
-      <form class="grid" method="post" action="/theme">{theme_inputs}<div class="actions span2"><button>Guardar tema</button></div></form>
+      <form class="grid" method="post" action="/theme" enctype="multipart/form-data">{theme_inputs}<div class="actions span2"><button>Guardar tema</button></div></form>
     </section>
 
     <section>

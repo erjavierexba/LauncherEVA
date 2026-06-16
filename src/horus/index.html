@@ -7,6 +7,7 @@
   <title>{{CLIENT_TITLE}}</title>
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="/horus.css" />
+  {{THEME_STYLE}}
 </head>
 <body>
   <main class="app-shell">
@@ -36,17 +37,18 @@
       </header>
 
       <nav class="tabs" aria-label="Vistas">
-        <button class="tab active" type="button" data-view="sheet">Ficha</button>
+        <button class="tab active" type="button" data-view="characterSelect">Personaje</button>
+        <button class="tab" type="button" data-view="sheet">Ficha</button>
         <button class="tab" type="button" data-view="scene">Escena</button>
       </nav>
 
       <div id="statusLine" class="status-line">Listo.</div>
 
-      <section id="sheetView" class="view active">
+      <section id="characterSelectView" class="view character-select-view active">
         <div class="section-header">
-          <h2>Ficha</h2>
-          <button id="saveSheetButton" class="secondary" type="button">Guardar</button>
+          <h2>Cargar personaje</h2>
         </div>
+        <div id="characterSelectList" class="character-select-list"></div>
         <div class="character-manager">
           <div class="panel-title">Personajes</div>
           <form id="characterForm" class="character-form">
@@ -55,6 +57,13 @@
             <button type="submit">Crear</button>
           </form>
           <div id="characterCrudList" class="character-crud-list"></div>
+        </div>
+      </section>
+
+      <section id="sheetView" class="view">
+        <div class="section-header">
+          <h2>Ficha</h2>
+          <button id="changeCharacterButton" class="secondary" type="button">Cambiar</button>
         </div>
         <div id="sheetList" class="sheet-list"></div>
       </section>

@@ -23,7 +23,8 @@ class PlayersRepository:
                 aliases TEXT NOT NULL DEFAULT '[]',
                 npc INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
-                eliminated_at TEXT NULL
+                eliminated_at TEXT NULL,
+                selected_character_id INTEGER NULL
             )
         """)
         self._ensure_columns()
@@ -156,6 +157,9 @@ class PlayersRepository:
         if "eliminated_at" not in columns:
             self.conn.execute("ALTER TABLE players ADD COLUMN eliminated_at TEXT NULL")
 
+        if "selected_character_id" not in columns:
+            self.conn.execute("ALTER TABLE players ADD COLUMN selected_character_id INTEGER NULL")
+
     def _migrate_legacy_table(self):
         table = self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'players'"
@@ -179,7 +183,8 @@ class PlayersRepository:
                 aliases TEXT NOT NULL DEFAULT '[]',
                 npc INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
-                eliminated_at TEXT NULL
+                eliminated_at TEXT NULL,
+                selected_character_id INTEGER NULL
             )
         """)
 
@@ -187,28 +192,30 @@ class PlayersRepository:
 
         if "username" in columns:
             self.conn.execute("""
-                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at)
-                SELECT username, '[]', 0, active, eliminated_at
+                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at, selected_character_id)
+                SELECT username, '[]', 0, active, eliminated_at, NULL
                 FROM players
             """)
         elif {"nombre", "npc"}.issubset(columns):
             self.conn.execute("""
-                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at)
+                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at, selected_character_id)
                 SELECT nombre,
                        {aliases_expr},
                        COALESCE(npc, 0),
                        COALESCE(active, 1),
-                       eliminated_at
+                       eliminated_at,
+                       NULL
                 FROM players
             """.format(aliases_expr=aliases_expr))
         elif "nombre" in columns:
             self.conn.execute("""
-                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at)
+                INSERT OR IGNORE INTO players_new (nombre, aliases, npc, active, eliminated_at, selected_character_id)
                 SELECT nombre,
                        '[]',
                        0,
                        COALESCE(active, 1),
-                       eliminated_at
+                       eliminated_at,
+                       NULL
                 FROM players
             """)
 
@@ -219,7 +226,7 @@ class PlayersRepository:
     def all(self):
         rows = self.conn.execute(
             """
-            SELECT id, nombre, aliases, npc, active, eliminated_at
+            SELECT id, nombre, aliases, npc, active, eliminated_at, selected_character_id
             FROM players
             ORDER BY npc ASC, nombre COLLATE NOCASE ASC
             """
@@ -234,6 +241,7 @@ class PlayersRepository:
                 "npc": bool(row["npc"]),
                 "active": bool(row["active"]),
                 "eliminatedAt": row["eliminated_at"],
+                "selectedCharacterId": row["selected_character_id"],
             }
             for row in rows
         ]
@@ -318,6 +326,7 @@ class PlayersRepository:
 
         if character_id and self.character_templates is not None:
             self.character_templates.ensure_values_for_character(character_id, template["id"], fields)
+            self._select_character_if_empty(player_id, character_id)
 
         return character_id
 
@@ -421,6 +430,7 @@ class PlayersRepository:
 
         if self.character_templates is not None:
             self.character_templates.ensure_values_for_character(cursor.lastrowid, template["id"], fields)
+            self._select_character_if_empty(player_id, cursor.lastrowid)
 
         self.conn.commit()
 
@@ -429,6 +439,77 @@ class PlayersRepository:
             "mensaje": f"Personaje {clean_name} creado.",
             "personaje": self.get_character(cursor.lastrowid),
         }
+
+    def select_character(self, player_id: int, character_id: int):
+        character = self.get_character(character_id)
+
+        if character is None or character["playerId"] != player_id or not character["active"]:
+            return {
+                "ok": False,
+                "mensaje": "Personaje no encontrado para ese jugador.",
+            }
+
+        self.conn.execute(
+            "UPDATE players SET selected_character_id = ? WHERE id = ?",
+            (character_id, player_id),
+        )
+        self.conn.commit()
+
+        return {
+            "ok": True,
+            "mensaje": f"Personaje cargado: {character['name']}.",
+            "personaje": self.get_character(character_id),
+        }
+
+    def selected_character_for_player(self, player_id: int):
+        row = self.conn.execute(
+            "SELECT selected_character_id FROM players WHERE id = ?",
+            (player_id,),
+        ).fetchone()
+
+        if row and row["selected_character_id"]:
+            selected = self.get_character(row["selected_character_id"])
+            if selected is not None and selected["active"]:
+                return selected
+
+        active_characters = [
+            character
+            for character in self.characters_for_player(player_id)
+            if character["active"]
+        ]
+
+        if len(active_characters) == 1:
+            self.select_character(player_id, active_characters[0]["id"])
+            return self.get_character(active_characters[0]["id"])
+
+        return None
+
+    def selected_characters(self):
+        selected = []
+
+        for player in self.all():
+            if not player["active"]:
+                continue
+
+            character = self.selected_character_for_player(player["id"])
+            if character is not None:
+                selected.append(character)
+
+        return selected
+
+    def _select_character_if_empty(self, player_id: int, character_id: int):
+        row = self.conn.execute(
+            "SELECT selected_character_id FROM players WHERE id = ?",
+            (player_id,),
+        ).fetchone()
+
+        if row and row["selected_character_id"]:
+            return
+
+        self.conn.execute(
+            "UPDATE players SET selected_character_id = ? WHERE id = ?",
+            (character_id, player_id),
+        )
 
     def update_character(self, character_id: int, name: str | None = None, notes: str | None = None, role: str | None = None):
         character = self.get_character(character_id)
@@ -486,6 +567,10 @@ class PlayersRepository:
         )
         self.conn.execute(
             "DELETE FROM player_characters WHERE id = ?",
+            (character_id,),
+        )
+        self.conn.execute(
+            "UPDATE players SET selected_character_id = NULL WHERE selected_character_id = ?",
             (character_id,),
         )
         self.conn.commit()

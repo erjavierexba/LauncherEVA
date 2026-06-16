@@ -6,6 +6,8 @@ const ROLL_HISTORY_STORAGE_KEY = "horus.rollHistory";
 let username = localStorage.getItem(USER_STORAGE_KEY) || "";
 let sheet = null;
 let characters = [];
+let allCharacters = [];
+let selectedCharacter = null;
 let mediaItems = [];
 let rollHistory = [];
 let countdownTimer = null;
@@ -17,6 +19,8 @@ const usernameInput = document.getElementById("usernameInput");
 const loginStatus = document.getElementById("loginStatus");
 const playerName = document.getElementById("playerName");
 const statusLine = document.getElementById("statusLine");
+const characterSelectView = document.getElementById("characterSelectView");
+const characterSelectList = document.getElementById("characterSelectList");
 const sheetList = document.getElementById("sheetList");
 const mediaList = document.getElementById("mediaList");
 const countdownPanel = document.getElementById("countdownPanel");
@@ -140,27 +144,75 @@ async function refreshState() {
 
   const data = await api(`/load/${encodeURIComponent(username)}`);
   sheet = data.sheet || null;
+  allCharacters = data.allCharacters || data.characters || [];
+  selectedCharacter = data.selectedCharacter || null;
   characters = data.characters || [];
   renderAll();
+
+  if (!selectedCharacter && allCharacters.length > 0) {
+    setActiveView("characterSelect");
+    setStatus("Elige un personaje para cargarlo.");
+    return;
+  }
+
   setStatus("Sincronizado con EVA.");
 }
 
 function renderAll() {
+  renderCharacterSelect();
   renderCharacterCrud();
   renderSheet();
   renderMedia();
   renderRollHistory();
 }
 
+function renderCharacterSelect() {
+  characterSelectList.innerHTML = "";
+
+  if (!allCharacters.length) {
+    characterSelectList.appendChild(empty("Sin personajes."));
+    return;
+  }
+
+  for (const character of allCharacters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "character-select-card";
+
+    const name = document.createElement("span");
+    name.className = "character-select-name";
+    name.textContent = character.nombre || character.name || "Personaje";
+
+    const meta = document.createElement("span");
+    meta.className = "character-select-meta";
+    meta.textContent = character.notes || character.template?.label || "Personaje";
+
+    button.append(name, meta);
+    button.addEventListener("click", () => selectCharacter(character.id));
+    characterSelectList.appendChild(button);
+  }
+}
+
+async function selectCharacter(characterId) {
+  const data = await api(`/api/characters/${encodeURIComponent(characterId)}/select`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  setStatus(data.mensaje || "Personaje cargado.");
+  await refreshState();
+  setActiveView("sheet");
+}
+
 function renderCharacterCrud() {
   characterCrudList.innerHTML = "";
+  const editableCharacters = allCharacters.length ? allCharacters : characters;
 
-  if (!characters.length) {
+  if (!editableCharacters.length) {
     characterCrudList.appendChild(empty("Sin personajes."));
     return;
   }
 
-  for (const character of characters) {
+  for (const character of editableCharacters) {
     const row = document.createElement("form");
     row.className = "character-crud-item";
     row.dataset.characterId = character.id;
@@ -243,10 +295,6 @@ async function deleteCharacter(characterId) {
 function renderSheet() {
   sheetList.innerHTML = "";
   const items = [];
-
-  if (sheet?.fields?.length) {
-    items.push({ title: username, id: null, fields: sheet.fields, schema: sheet.template?.schema || null });
-  }
 
   for (const character of characters) {
     if (character.sheet?.fields?.length) {
@@ -352,13 +400,24 @@ function createSheetFieldControl(field, item) {
     wrapper.className = "sheet-field-wide";
     wrapper.append(label, createObjectListField(field, item));
   } else if (isSelectField(field)) {
-    wrapper.append(label, createSelectField(field, field.value || field.defaultValue || "", item.schema));
+    const select = createSelectField(field, field.value || field.defaultValue || "", item.schema);
+    select.addEventListener("change", () => {
+      updateSheetField(item, field.key, select.value).catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+    });
+    wrapper.append(label, select);
   } else if (isFormulaField(field)) {
     wrapper.append(label, createFormulaRollButton(field, item));
   } else {
     const input = document.createElement(field.multiline || field.type === "long_text" ? "textarea" : "input");
     input.value = field.value || "";
     input.dataset.fieldKey = field.key;
+    input.addEventListener("change", () => {
+      updateSheetField(item, field.key, input.value).catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+    });
     wrapper.append(label, input);
   }
   return wrapper;
@@ -380,8 +439,13 @@ function createObjectListField(field, item) {
   let objects = normalizeObjectArray(field.value);
   const itemFields = normalizeObjectItemFields(field);
 
-  const sync = () => {
+  const sync = (notify = true) => {
     hidden.value = JSON.stringify(objects);
+    if (notify) {
+      updateSheetField(item, field.key, objects).catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+    }
   };
 
   const render = () => {
@@ -434,7 +498,7 @@ function createObjectListField(field, item) {
   });
 
   wrapper.append(list, hidden, add);
-  sync();
+  sync(false);
   render();
   return wrapper;
 }
@@ -618,6 +682,25 @@ async function saveSheet() {
 
   setStatus("Ficha guardada.");
   await refreshState();
+}
+
+async function updateSheetField(item, fieldId, value) {
+  if (!item?.id || !fieldId) {
+    return;
+  }
+
+  const data = await api(`/api/characters/by-id/${encodeURIComponent(item.id)}/sheet`, {
+    method: "PUT",
+    body: JSON.stringify({ fields: { [fieldId]: value } }),
+  });
+
+  applyCharacterSheetUpdate({
+    user: username,
+    character: item.id,
+    fieldId,
+    value,
+  }, false);
+  setStatus(data.mensaje || "Ficha actualizada.");
 }
 
 function cacheMedia(item) {
@@ -850,7 +933,7 @@ function cancelCountdown() {
 }
 
 function shouldHandleEvent(event) {
-  return event.destinatario === "TODOS" || event.destinatario === username;
+  return event.destinatario === "TODOS" || event.destinatario === username || event.user === username;
 }
 
 async function handleEvent(event) {
@@ -867,11 +950,54 @@ async function handleEvent(event) {
     cancelCountdown();
   } else if (event.tipo === "DICE_ROLL") {
     setStatus(event.mensaje || "Tirada registrada.");
-  } else if (event.tipo === "TEMPLATE_UPDATE" || event.tipo === "CHARACTER_SHEET_UPDATE") {
+  } else if (event.tipo === "TEMPLATE_UPDATE") {
     await refreshState();
+  } else if (event.tipo === "THEME_UPDATE") {
+    window.location.reload();
+  } else if (event.tipo === "CHARACTER_SHEET_UPDATE" || event.fieldId) {
+    applyCharacterSheetUpdate(event);
   } else if (event.tipo === "CLIENT_RESET") {
     await resetClientApp();
   }
+}
+
+function applyCharacterSheetUpdate(event, rerender = true) {
+  if (event.user && event.user !== username) {
+    return false;
+  }
+
+  const characterId = event.character;
+  const fieldId = event.fieldId;
+  if (!characterId || !fieldId) {
+    return false;
+  }
+
+  const updateCharacter = (character) => {
+    if (String(character.id) !== String(characterId) || !character.sheet?.fields) {
+      return character;
+    }
+
+    return {
+      ...character,
+      sheet: {
+        ...character.sheet,
+        fields: character.sheet.fields.map((field) => (
+          field.key === fieldId ? { ...field, value: event.value } : field
+        )),
+      },
+    };
+  };
+
+  characters = characters.map(updateCharacter);
+  allCharacters = allCharacters.map(updateCharacter);
+  selectedCharacter = selectedCharacter ? updateCharacter(selectedCharacter) : selectedCharacter;
+
+  if (rerender) {
+    renderAll();
+    setStatus(event.mensaje || "Ficha actualizada desde EVA.");
+  }
+
+  return true;
 }
 
 function connectWebSocket() {
@@ -949,14 +1075,22 @@ function evaluateSheetFormula(rawFormula, fields, schema = null) {
 }
 
 function rollFormula(rawFormula) {
-  return evaluateFormulaExpression(rawFormula, {});
+  const currentFields = selectedCharacter?.sheet?.fields || characters[0]?.sheet?.fields || [];
+  const values = Object.fromEntries((currentFields || []).map((field) => [field.key, field.value ?? field.defaultValue ?? ""]));
+  const schema = selectedCharacter?.sheet?.template?.schema || characters[0]?.sheet?.template?.schema || null;
+  return evaluateFormulaExpression(rawFormula, values, schema?.constants || {});
 }
 
 function evaluateFormulaExpression(rawFormula, values = {}, constants = {}) {
+  return evaluateFormulaExpressionInternal(rawFormula, values, constants, 0);
+}
+
+function evaluateFormulaExpressionInternal(rawFormula, values = {}, constants = {}, depth = 0) {
+  if (depth > 8) throw new Error("Fórmula demasiado profunda.");
   const formula = String(rawFormula || "").trim();
   if (!formula) throw new Error("Escribe una fórmula.");
 
-  const withConstants = resolveFormulaConstants(formula, values, constants);
+  const withConstants = resolveFormulaConstants(formula, values, constants, depth);
   const normalized = withConstants.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
   const tokens = tokenizeFormula(normalized, values);
   const output = [];
@@ -1011,11 +1145,28 @@ function evaluateFormulaExpression(rawFormula, values = {}, constants = {}) {
     natural: rolls.length === 1 ? rolls[0].total : total,
     modifier: rolls.length === 1 ? total - rolls[0].total : 0,
     diceLabel: rolls.map((roll) => roll.label).join("+") || "formula",
-    breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
+    breakdown: formulaBreakdown(tokens, formula),
   };
 }
 
-function resolveFormulaConstants(formula, values, constants) {
+function formulaBreakdown(tokens, fallback) {
+  const parts = tokens.map((token) => {
+    if (token.roll) {
+      const label = `${token.roll.label}[${token.roll.rolls.join(",")}]`;
+      return token.value < 0 ? `-${label}` : label;
+    }
+
+    if (token.type === "number") {
+      return String(token.value);
+    }
+
+    return token.value;
+  }).filter(Boolean);
+
+  return parts.length ? parts.join(" ") : fallback;
+}
+
+function resolveFormulaConstants(formula, values, constants, depth = 0) {
   return String(formula || "").replace(/\$([a-zA-Z_][\w.-]*)\[([^\]]+)\]/g, (_match, path, keyExpression) => {
     const table = resolveConstantPath(constants, path);
     if (!table || typeof table !== "object") {
@@ -1027,8 +1178,22 @@ function resolveFormulaConstants(formula, values, constants) {
       ? values[valueKey]
       : valueKey;
     const resolved = table[String(resolvedKey)];
-    return String(resolved ?? 0);
+    return String(resolveFormulaConstantValue(resolved, values, constants, depth));
   });
+}
+
+function resolveFormulaConstantValue(value, values, constants, depth = 0) {
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value ? 1 : 0;
+
+  const raw = String(value ?? "0").trim();
+  if (!raw) return 0;
+
+  if (/^[+-]?\d+$/.test(raw)) {
+    return parseInt(raw, 10);
+  }
+
+  return evaluateFormulaExpressionInternal(raw, values, constants, depth + 1).total;
 }
 
 function tokenizeFormula(formula, values) {
@@ -1157,6 +1322,10 @@ function handleFormulaRoll() {
 }
 
 function setActiveView(view) {
+  if (view === "sheet" && !selectedCharacter && allCharacters.length > 0) {
+    view = "characterSelect";
+  }
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === view);
   });
@@ -1180,9 +1349,18 @@ document.getElementById("refreshButton").addEventListener("click", refreshState)
 document.getElementById("logoutButton").addEventListener("click", () => {
   localStorage.removeItem(USER_STORAGE_KEY);
   username = "";
+  allCharacters = [];
+  characters = [];
+  selectedCharacter = null;
   showLogin();
 });
-document.getElementById("saveSheetButton").addEventListener("click", saveSheet);
+document.getElementById("changeCharacterButton").addEventListener("click", () => {
+  selectedCharacter = null;
+  characters = [];
+  renderAll();
+  setActiveView("characterSelect");
+  setStatus("Elige un personaje para cargarlo.");
+});
 characterForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {

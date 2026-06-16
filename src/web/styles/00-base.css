@@ -249,7 +249,7 @@ body {
       width: 100%;
       min-width: 0;
       padding: 9px 10px;
-      background: var(--bg);
+      background: var(--input-bg);
       color: var(--text);
       border: 1px solid var(--border-strong);
       border-radius: 6px;

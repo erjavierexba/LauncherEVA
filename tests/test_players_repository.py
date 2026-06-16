@@ -82,6 +82,19 @@ class PlayersRepositoryTest(unittest.TestCase):
         self.assertEqual(len(players.characters_for_player(player["id"])), 3)
         self.assertEqual(templates.sheet_for_character(first["personaje"]["id"])["fields"], [])
 
+    def test_selects_one_character_per_player(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        players = PlayersRepository(conn, [{"name": "Ale"}], templates)
+        player = players.get("Ale")
+        created = players.create_character(player["id"], "Kira")
+
+        result = players.select_character(player["id"], created["personaje"]["id"])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(players.selected_character_for_player(player["id"])["nombre"], "Kira")
+        self.assertEqual([character["nombre"] for character in players.selected_characters()], ["Kira"])
+
     def test_creates_character_with_notes_for_selected_template(self):
         conn = self.create_connection()
         templates = CharacterTemplatesRepository(conn)

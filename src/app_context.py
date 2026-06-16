@@ -40,13 +40,16 @@ def create_app_context() -> AppContext:
     server = config.data["server"]
     client_port = server["clientPort"]
 
+    media_root = config.role_media_root()
+    media_root.mkdir(parents=True, exist_ok=True)
+
     return AppContext(
-        db=DB(initial_users=config.users()),
+        db=DB(db_path=config.role_db_path(), initial_users=config.users(), max_backups=config.max_db_backups()),
         ws_queue=asyncio.Queue(),
         incoming_queue=asyncio.Queue(),
         config=config,
         music_service=MusicService(),
-        media_catalog=MediaCatalog(base_url=get_base_url(client_port)),
+        media_catalog=MediaCatalog(media_root=media_root, base_url=get_base_url(client_port)),
         web_host=server["host"],
         web_port=server["evaPort"],
         horus_port=client_port,

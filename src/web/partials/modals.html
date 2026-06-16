@@ -34,6 +34,19 @@
     </div>
   </div>
 
+  <div id="killPlayerModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal confirm-modal">
+      <div class="modal-header">
+        <h2>Eliminar jugador</h2>
+        <button id="cancelKillPlayerButton" class="compact secondary">Cerrar</button>
+      </div>
+      <p id="killPlayerText" class="confirm-text">Esta acción no se puede deshacer.</p>
+      <div class="command-actions">
+        <button id="confirmKillPlayerButton" class="danger">Eliminar jugador</button>
+      </div>
+    </div>
+  </div>
+
   <div id="mediaPreviewModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal preview-modal">
       <div class="modal-header">
@@ -160,7 +173,7 @@
       <div class="help-grid">
         <section class="help-block">
           <h3>Constantes</h3>
-          <p>Sirven para tablas reutilizables, como niveles de competencia. Añade valores en Reglas y tablas con nombres tipo <strong>proficiency.trained</strong> y valores numéricos o de texto.</p>
+          <p>Sirven para tablas reutilizables, como niveles de competencia. Añade valores en Reglas y tablas con nombres tipo <strong>proficiency.trained</strong> y valores numéricos, texto o fórmulas como <strong>2 + level</strong>.</p>
           <p>Un selector puede usar una constante escribiendo el nombre de la tabla en Opciones, por ejemplo <strong>proficiency</strong>.</p>
         </section>
         <section class="help-block">

@@ -24,6 +24,7 @@
     let activeCharacterDetailName = null;
     let activeCharacterDetailId = null;
     let pendingDeleteCharacter = null;
+    let pendingKillPlayer = null;
     let templateJsonMode = "edit";
     let templateJsonSourceId = null;
     let templateBuilderTab = "builder";
@@ -84,6 +85,8 @@
     const characterDetailBody = document.getElementById("characterDetailBody");
     const deleteCharacterModal = document.getElementById("deleteCharacterModal");
     const deleteCharacterText = document.getElementById("deleteCharacterText");
+    const killPlayerModal = document.getElementById("killPlayerModal");
+    const killPlayerText = document.getElementById("killPlayerText");
     const mediaPreviewModal = document.getElementById("mediaPreviewModal");
     const mediaPreviewTitle = document.getElementById("mediaPreviewTitle");
     const mediaPreviewBody = document.getElementById("mediaPreviewBody");

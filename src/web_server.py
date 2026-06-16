@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import re
 import shutil
 import tempfile
@@ -70,7 +69,123 @@ def render_html(context, ws_url: str) -> str:
         .replace("{{ROLE_SUBTITLE}}", role_subtitle)
         .replace("{{CLIENT_ADDRESS}}", client_address)
         .replace("{{THEME_JSON}}", json.dumps(theme, ensure_ascii=False))
+        .replace("{{THEME_STYLE}}", theme_style(theme, "eva"))
     )
+
+
+def theme_style(theme: dict, target: str = "eva") -> str:
+    if not isinstance(theme, dict):
+        theme = {}
+
+    background_raw = str(theme.get("background") or "").strip()
+    background = css_value(background_raw, "#0d0f12")
+    surface = css_value(theme.get("surface"), "#1a1f27")
+    surface_alt = css_value(theme.get("surfaceAlt"), "#111419")
+    input_background = css_value(theme.get("inputBackground"), surface_alt)
+    text = css_value(theme.get("text"), "#ededed")
+    muted = css_value(theme.get("muted"), "#9fa7b3")
+    accent = css_value(theme.get("accent"), "#c9a24a")
+    primary = css_value(theme.get("primary"), "#66ccff")
+    danger = css_value(theme.get("danger"), "#c65353")
+    radius = css_value(theme.get("radius"), "8px")
+
+    if target == "horus":
+        variables = {
+            "--bg": background,
+            "--panel": surface,
+            "--panel-soft": surface_alt,
+            "--input-bg": input_background,
+            "--line": muted,
+            "--text": text,
+            "--muted": muted,
+            "--accent": primary,
+            "--gold": accent,
+            "--danger": danger,
+            "--radius": radius,
+        }
+    else:
+        variables = {
+            "--bg": background,
+            "--page": background,
+            "--panel": surface,
+            "--panel-soft": surface_alt,
+            "--panel-deep": surface_alt,
+            "--input-bg": input_background,
+            "--border": muted,
+            "--border-strong": muted,
+            "--text": text,
+            "--muted": muted,
+            "--soft": text,
+            "--accent": primary,
+            "--accent-strong": primary,
+            "--gold": accent,
+            "--danger": danger,
+            "--radius": radius,
+        }
+
+    body = " ".join(f"{key}: {value};" for key, value in variables.items())
+    image_rules = background_image_rules(background_raw, target)
+    return f"<style>:root {{{body}}}{image_rules}</style>"
+
+
+def css_value(value, fallback: str) -> str:
+    raw = str(value or fallback).strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", raw):
+        return raw
+    if re.fullmatch(r"\d+(?:px|rem|em|%)", raw):
+        return raw
+    return fallback
+
+
+def background_image_rules(value: str, target: str) -> str:
+    raw = str(value or "").strip()
+    if not is_background_image(raw):
+        return ""
+
+    image = f"url({json.dumps(raw)})"
+    if target == "horus":
+        return (
+            "body {"
+            f"background-image: {image};"
+            "background-size: cover;"
+            "background-position: center center;"
+            "background-repeat: no-repeat;"
+            "background-attachment: fixed;"
+            "}"
+            ".app-shell {"
+            f"background-image: linear-gradient(180deg, rgba(0,0,0,.34), rgba(0,0,0,.74)), {image};"
+            "background-size: cover;"
+            "background-position: center center;"
+            "background-repeat: no-repeat;"
+            "background-attachment: fixed;"
+            "}"
+        )
+
+    return (
+        "body {"
+        f"background-image: linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.68)), {image};"
+        "background-size: cover;"
+        "background-position: center center;"
+        "background-repeat: no-repeat;"
+        "background-attachment: fixed;"
+        "}"
+    )
+
+
+def is_background_image(value: str) -> bool:
+    raw = str(value or "").strip().lower()
+    if is_hex_color(raw):
+        return False
+
+    return (
+        raw.startswith("/assets/")
+        or raw.startswith("http://")
+        or raw.startswith("https://")
+    )
+
+
+def is_hex_color(value: str) -> bool:
+    return bool(re.fullmatch(r"#[0-9a-fA-F]{6}", str(value or "").strip()))
 
 
 def no_store_headers():
@@ -252,8 +367,25 @@ def sync_launcher_settings(context):
         LAUNCHER_STATE.settings["role_name"] = str(project["roleName"])
     if project.get("appSubtitle"):
         LAUNCHER_STATE.settings["app_subtitle"] = str(project["appSubtitle"])
+    database = context.config.data.get("database", {})
+    if "maxBackups" in database:
+        LAUNCHER_STATE.settings["db_max_backups"] = str(database["maxBackups"])
     LAUNCHER_STATE.settings["web_port"] = str(server.get("evaPort", context.web_port))
     LAUNCHER_STATE.settings["client_port"] = str(server.get("clientPort", context.horus_port))
+
+
+def sync_role_resources(context):
+    from src.db import DB
+
+    context.config.data = context.config.load()
+    media_root = context.config.role_media_root()
+    media_root.mkdir(parents=True, exist_ok=True)
+    context.media_catalog.set_media_root(media_root)
+    context.db = DB(
+        db_path=context.config.role_db_path(),
+        initial_users=context.config.users(),
+        max_backups=context.config.max_db_backups(),
+    )
 
 
 async def config_form(request):
@@ -263,12 +395,33 @@ async def config_form(request):
 
 async def config_settings(request):
     LAUNCHER_STATE.save_settings(await config_form(request))
+    sync_role_resources(request.app["context"])
     config_redirect()
 
 
 async def config_theme(request):
-    LAUNCHER_STATE.save_theme(await config_form(request))
+    post = await request.post()
+    form = {key: str(value) for key, value in post.items() if isinstance(value, str)}
+    upload = post.get("background_file")
+    background_upload = None
+
+    if upload is not None and getattr(upload, "filename", ""):
+        suffix = Path(upload.filename).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+            shutil.copyfileobj(upload.file, temp)
+            temp_path = Path(temp.name)
+        background_upload = {
+            "path": temp_path,
+            "filename": upload.filename,
+        }
+
+    try:
+        LAUNCHER_STATE.save_theme(form, background_upload)
+    finally:
+        if background_upload:
+            background_upload["path"].unlink(missing_ok=True)
     request.app["context"].config.data = request.app["context"].config.load()
+    await request.app["context"].ws_queue.put(theme_update_event())
     config_redirect()
 
 
@@ -276,12 +429,13 @@ async def config_theme_preset(request):
     form = await config_form(request)
     LAUNCHER_STATE.apply_preset(form.get("preset", "eva"))
     request.app["context"].config.data = request.app["context"].config.load()
+    await request.app["context"].ws_queue.put(theme_update_event())
     config_redirect()
 
 
 async def config_apply_release(request):
     LAUNCHER_STATE.apply_release_configuration()
-    request.app["context"].config.data = request.app["context"].config.load()
+    sync_role_resources(request.app["context"])
     config_redirect()
 
 
@@ -403,10 +557,11 @@ async def load_user_state(request):
 
     user = db.players.get(username)
     sheet = db.character_templates.sheet_for_player(user["id"]) if user else None
-    characters = []
+    all_characters = []
+    selected_character = None
 
     if user:
-        characters = [
+        all_characters = [
             {
                 **character,
                 "sheet": db.character_templates.sheet_for_character(character["id"]),
@@ -414,13 +569,21 @@ async def load_user_state(request):
             for character in db.players.characters_for_player(user["id"])
             if character["active"]
         ]
+        selected = db.players.selected_character_for_player(user["id"])
+        if selected is not None:
+            selected_character = {
+                **selected,
+                "sheet": db.character_templates.sheet_for_character(selected["id"]),
+            }
 
     return web.json_response({
         "ok": True,
         "user": user,
         "template": db.character_templates.active_template(),
         "sheet": sheet,
-        "characters": characters,
+        "selectedCharacter": selected_character,
+        "characters": [selected_character] if selected_character else [],
+        "allCharacters": all_characters,
     })
 
 
@@ -455,7 +618,7 @@ async def api_characters(request):
                 **character,
                 "sheet": context.db.character_templates.sheet_for_character(character["id"]),
             }
-            for character in context.db.players.all_characters()
+            for character in context.db.players.selected_characters()
         ],
         "template": context.db.character_templates.active_template(),
     })
@@ -473,7 +636,7 @@ async def api_status(request):
                 **character,
                 "sheet": context.db.character_templates.sheet_for_character(character["id"]),
             }
-            for character in context.db.players.all_characters()
+            for character in context.db.players.selected_characters()
         ],
     })
 
@@ -551,6 +714,31 @@ async def api_character_update(request):
     return web.json_response(result, status=200 if result["ok"] else 400)
 
 
+async def api_character_select(request):
+    context = request.app["context"]
+    character_id = parse_positive_int(request.match_info["character_id"])
+
+    if character_id is None:
+        return web.json_response({
+            "ok": False,
+            "mensaje": "Personaje inválido.",
+        }, status=400)
+
+    character = context.db.players.get_character(character_id)
+    if character is None:
+        return web.json_response({
+            "ok": False,
+            "mensaje": "Personaje no encontrado.",
+        }, status=404)
+
+    result = context.db.players.select_character(character["playerId"], character_id)
+
+    if result.get("ok"):
+        await context.ws_queue.put(template_update_event(context.db))
+
+    return web.json_response(result, status=200 if result.get("ok") else 400)
+
+
 async def api_character_delete(request):
     context = request.app["context"]
     character_id = parse_positive_int(request.match_info["character_id"])
@@ -604,12 +792,13 @@ async def api_character_sheet_update_by_id(request):
     result = context.db.character_templates.update_character_values(character_id, fields)
 
     if result.get("ok"):
-        await context.ws_queue.put(character_sheet_update_event(
+        for event in character_sheet_update_events(
             character["playerName"],
             result.get("sheet"),
             fields,
             character,
-        ))
+        ):
+            await context.ws_queue.put(event)
 
     return web.json_response(result, status=200 if result.get("ok") else 400)
 
@@ -644,7 +833,8 @@ async def api_character_sheet_update(request):
     result = context.db.character_templates.update_player_values(player["id"], fields)
 
     if result.get("ok"):
-        await context.ws_queue.put(character_sheet_update_event(username, result.get("sheet"), fields))
+        for event in character_sheet_update_events(username, result.get("sheet"), fields):
+            await context.ws_queue.put(event)
 
     return web.json_response(result, status=200 if result.get("ok") else 400)
 
@@ -722,7 +912,7 @@ def template_update_event(db):
     template = db.character_templates.active_template()
     characters = []
 
-    for character in db.players.all_characters():
+    for character in db.players.selected_characters():
         if not character["active"]:
             continue
 
@@ -742,18 +932,43 @@ def template_update_event(db):
     }
 
 
+def character_sheet_update_events(username: str, sheet: dict | None, fields: dict, character: dict | None = None):
+    template = sheet.get("template") if isinstance(sheet, dict) else None
+    field_values = {
+        field.get("key"): field.get("value")
+        for field in (sheet or {}).get("fields", [])
+        if isinstance(field, dict)
+    }
+
+    return [
+        {
+            "user": username,
+            "character": character["id"] if character else None,
+            "template": template.get("key") if isinstance(template, dict) else None,
+            "fieldId": key,
+            "value": field_values.get(key, value),
+        }
+        for key, value in fields.items()
+        if isinstance(key, str)
+    ]
+
+
 def character_sheet_update_event(username: str, sheet: dict | None, fields: dict, character: dict | None = None):
+    events = character_sheet_update_events(username, sheet, fields, character)
+    return events[0] if events else {
+        "user": username,
+        "character": character["id"] if character else None,
+        "template": None,
+        "fieldId": "",
+        "value": "",
+    }
+
+
+def theme_update_event():
     return {
-        "tipo": "CHARACTER_SHEET_UPDATE",
-        "destinatario": username,
-        "mensaje": f"Ficha actualizada: {character['name']}" if character else f"Ficha actualizada: {username}",
-        "valor": {
-            "username": username,
-            "character": character,
-            "characterId": character["id"] if character else None,
-            "sheet": sheet,
-            "fields": [key for key in fields.keys() if isinstance(key, str)],
-        },
+        "tipo": "THEME_UPDATE",
+        "destinatario": "TODOS",
+        "mensaje": "Tema actualizado.",
     }
 
 
@@ -889,6 +1104,22 @@ async def media_catalog_endpoint(request):
         "ok": True,
         "catalogo": context.media_catalog.list(),
     })
+
+
+async def media_file(request):
+    context = request.app["context"]
+    root = context.media_catalog.media_root.resolve()
+    path = (root / Path(request.match_info["filename"])).resolve()
+
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise web.HTTPNotFound()
+
+    if not path.exists() or not path.is_file():
+        raise web.HTTPNotFound()
+
+    return web.FileResponse(path)
 
 
 async def name_generator_options(request):
@@ -1202,6 +1433,7 @@ async def start_web_server(context):
     app.router.add_get("/api/status", api_status)
     app.router.add_get("/api/characters", api_characters)
     app.router.add_post("/api/characters", api_characters_create)
+    app.router.add_post("/api/characters/{character_id}/select", api_character_select)
     app.router.add_put("/api/characters/{character_id}", api_character_update)
     app.router.add_delete("/api/characters/{character_id}", api_character_delete)
     app.router.add_put("/api/characters/by-id/{character_id}/sheet", api_character_sheet_update_by_id)
@@ -1227,9 +1459,8 @@ async def start_web_server(context):
     app.router.add_get("/api/music/status", music_status)
     app.router.add_post("/api/music/play", play_music)
     app.router.add_post("/api/music/control", control_music)
-    media_path = Path(os.environ.get("EVA_MEDIA_ROOT") or "media").resolve()
-    media_path.mkdir(parents=True, exist_ok=True)
-    app.router.add_static("/media/", path=media_path, name="media")
+    context.media_catalog.media_root.mkdir(parents=True, exist_ok=True)
+    app.router.add_get("/media/{filename:.*}", media_file)
     app.router.add_static("/assets/", path=WEB_ASSETS_PATH, name="assets")
     app.router.add_static("/styles/", path=WEB_STYLES_PATH, name="styles")
 

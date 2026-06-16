@@ -18,10 +18,10 @@ class CharacterTemplatesRepository:
         "constants": {
             "proficiency": {
                 "untrained": 0,
-                "trained": 2,
-                "expert": 4,
-                "master": 6,
-                "legendary": 8,
+                "trained": "2 + level",
+                "expert": "4 + level",
+                "master": "6 + level",
+                "legendary": "8 + level",
             },
             "attributeModifiers": {
                 "8": -1,

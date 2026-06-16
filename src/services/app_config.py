@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from src.domain.players import normalizar
@@ -19,6 +20,7 @@ DEFAULT_CONFIG = {
         "background": "#0d0f12",
         "surface": "#1a1f27",
         "surfaceAlt": "#111419",
+        "inputBackground": "#0f141b",
         "text": "#ededed",
         "muted": "#9fa7b3",
         "accent": "#c9a24a",
@@ -30,11 +32,15 @@ DEFAULT_CONFIG = {
     "project": {
         "roleName": "EVA",
         "appSubtitle": "EVA mantiene el vinculo abierto",
+        "repository": "roles/eva",
     },
     "server": {
         "host": "0.0.0.0",
         "evaPort": 8000,
         "clientPort": 8080,
+    },
+    "database": {
+        "maxBackups": 10,
     },
 }
 
@@ -74,7 +80,31 @@ class AppConfig:
             "users": self.users(),
             "project": self.data["project"],
             "server": self.data["server"],
+            "database": self.data["database"],
         }
+
+    def role_name(self):
+        return str(self.data.get("project", {}).get("roleName") or "EVA").strip() or "EVA"
+
+    def role_slug(self):
+        return slugify(self.role_name())
+
+    def role_repository_root(self):
+        repository = str(self.data.get("project", {}).get("repository") or "").strip()
+        return Path(repository) if repository else Path("roles") / self.role_slug()
+
+    def role_media_root(self):
+        return self.role_repository_root() / "media"
+
+    def role_db_path(self):
+        env_path = os.environ.get("EVA_DB_PATH")
+        if env_path:
+            return Path(env_path)
+
+        return self.role_repository_root() / "eva.sqlite3"
+
+    def max_db_backups(self):
+        return int(self.data.get("database", {}).get("maxBackups", 10))
 
     def users(self):
         users = []
@@ -162,11 +192,18 @@ def merge_config(data: dict):
     if isinstance(data.get("users"), list):
         merged["users"] = data["users"]
 
+    project_has_repository = False
     if isinstance(data.get("project"), dict):
         project = data["project"]
         for key in ("roleName", "appSubtitle"):
             if isinstance(project.get(key), str) and project[key].strip():
                 merged["project"][key] = project[key].strip()
+        if isinstance(project.get("repository"), str) and project["repository"].strip():
+            merged["project"]["repository"] = project["repository"].strip()
+            project_has_repository = True
+
+    if not project_has_repository:
+        merged["project"]["repository"] = str(Path("roles") / slugify(merged["project"]["roleName"]))
 
     if isinstance(data.get("server"), dict):
         server = data["server"]
@@ -178,9 +215,15 @@ def merge_config(data: dict):
             if port is not None:
                 merged["server"][key] = port
 
+    if isinstance(data.get("database"), dict):
+        max_backups = parse_non_negative_int(data["database"].get("maxBackups"))
+        if max_backups is not None:
+            merged["database"]["maxBackups"] = max_backups
+
     apply_env_port(merged["server"], "evaPort", "EVA_PORT")
     apply_env_port(merged["server"], "clientPort", "EVA_CLIENT_PORT")
     apply_env_text(merged["server"], "host", "EVA_HOST")
+    apply_env_non_negative_int(merged["database"], "maxBackups", "EVA_DB_MAX_BACKUPS")
 
     return merged
 
@@ -207,3 +250,32 @@ def apply_env_text(server: dict, key: str, env_name: str):
     value = os.environ.get(env_name)
     if value and value.strip():
         server[key] = value.strip()
+
+
+def parse_non_negative_int(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+
+    if parsed < 0:
+        return None
+
+    return parsed
+
+
+def apply_env_non_negative_int(section: dict, key: str, env_name: str):
+    value = parse_non_negative_int(os.environ.get(env_name))
+    if value is not None:
+        section[key] = value
+
+
+def slugify(text: str):
+    import unicodedata
+
+    clean = "".join(
+        char
+        for char in unicodedata.normalize("NFD", str(text or "").lower().strip())
+        if unicodedata.category(char) != "Mn"
+    )
+    return re.sub(r"[^a-z0-9]+", "_", clean).strip("_") or "rol"

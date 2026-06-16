@@ -49,10 +49,11 @@ class WebServerTest(unittest.TestCase):
     def test_character_sheet_update_event_targets_updated_character(self):
         event = character_sheet_update_event("Ale", {"fields": []}, {"hp": "9"})
 
-        self.assertEqual(event["tipo"], "CHARACTER_SHEET_UPDATE")
-        self.assertEqual(event["destinatario"], "Ale")
-        self.assertEqual(event["valor"]["username"], "Ale")
-        self.assertEqual(event["valor"]["fields"], ["hp"])
+        self.assertEqual(event["user"], "Ale")
+        self.assertIsNone(event["character"])
+        self.assertIsNone(event["template"])
+        self.assertEqual(event["fieldId"], "hp")
+        self.assertEqual(event["value"], "9")
 
 if __name__ == "__main__":
     unittest.main()

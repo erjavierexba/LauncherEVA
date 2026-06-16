@@ -28,6 +28,15 @@ class AppConfigTest(unittest.TestCase):
         self.assertEqual(config["server"]["evaPort"], 8000)
         self.assertEqual(config["server"]["clientPort"], 8080)
 
+    def test_merge_preserves_database_backup_limit(self):
+        config = merge_config({
+            "database": {
+                "maxBackups": "3",
+            },
+        })
+
+        self.assertEqual(config["database"]["maxBackups"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

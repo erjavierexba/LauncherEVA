@@ -74,6 +74,11 @@ class MediaCatalog:
 
         self.aliases = self.load_aliases()
 
+    def set_media_root(self, media_root):
+        self.media_root = Path(media_root)
+        self.aliases_file = self.media_root / "aliases.json"
+        self.reload_aliases()
+
     def load_aliases(self) -> dict[str, str]:
         if not self.aliases_file.exists():
             print(f"[MEDIA] No existe archivo de aliases: {self.aliases_file}")

@@ -41,9 +41,9 @@ textarea {
 
 button {
   min-height: 42px;
-  border: 1px solid #3b8ba0;
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
-  background: #1f6172;
+  background: var(--panel-soft);
   color: var(--text);
   font-weight: 900;
 }
@@ -67,7 +67,7 @@ textarea {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #0f141b;
+  background: var(--input-bg);
   color: var(--text);
 }
 
@@ -81,7 +81,7 @@ label {
 
 .app-shell {
   min-height: 100vh;
-  background: linear-gradient(180deg, #111923 0, var(--bg) 34vh);
+  background: linear-gradient(180deg, var(--panel) 0, var(--bg) 34vh);
 }
 
 .login-view,
@@ -171,13 +171,13 @@ h2 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   position: sticky;
   top: 0;
   z-index: 2;
   padding: 8px 0;
-  background: #111923;
+  background: var(--bg);
 }
 
 .tab {
@@ -190,7 +190,7 @@ h2 {
 .tab.active {
   border-color: var(--accent);
   color: var(--text);
-  background: #173542;
+  background: var(--panel-soft);
 }
 
 .status-line {
@@ -199,7 +199,7 @@ h2 {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #101720;
+  background: var(--panel);
 }
 
 .view {
@@ -280,6 +280,31 @@ h2 {
 .character-crud-list {
   display: grid;
   gap: 8px;
+}
+
+.character-select-list {
+  display: grid;
+  gap: 10px;
+}
+
+.character-select-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-color: var(--line);
+  background: var(--panel);
+  text-align: left;
+}
+
+.character-select-name {
+  color: var(--gold);
+  font-weight: 900;
+}
+
+.character-select-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .character-crud-item {

@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from pathlib import Path
 
 from aiohttp import web
@@ -11,13 +10,16 @@ from src.web_server import (
     api_character_sheet_update,
     api_character_sheet_update_by_id,
     api_character_delete,
+    api_character_select,
     api_character_update,
     api_characters_create,
     api_config,
     api_dice_roll_create,
     load_user_state,
     login,
+    media_file,
     no_store_headers,
+    theme_style,
 )
 
 
@@ -44,6 +46,7 @@ def render_horus_html(context, ws_url: str) -> str:
         .replace("{{CLIENT_TITLE}}", client_title)
         .replace("{{CLIENT_SUBTITLE}}", client_subtitle)
         .replace("{{THEME_JSON}}", json.dumps(theme, ensure_ascii=False))
+        .replace("{{THEME_STYLE}}", theme_style(theme, "horus"))
     )
 
 
@@ -84,14 +87,14 @@ async def start_horus_server(context):
     app.router.add_post("/api/login", login)
     app.router.add_get("/load/{username}", load_user_state)
     app.router.add_post("/api/characters", api_characters_create)
+    app.router.add_post("/api/characters/{character_id}/select", api_character_select)
     app.router.add_put("/api/characters/{character_id}", api_character_update)
     app.router.add_delete("/api/characters/{character_id}", api_character_delete)
     app.router.add_put("/api/characters/by-id/{character_id}/sheet", api_character_sheet_update_by_id)
     app.router.add_put("/api/characters/{username}/sheet", api_character_sheet_update)
     app.router.add_post("/api/dice-rolls", api_dice_roll_create)
-    media_path = Path(os.environ.get("EVA_MEDIA_ROOT") or "media").resolve()
-    media_path.mkdir(parents=True, exist_ok=True)
-    app.router.add_static("/media/", path=media_path, name="media")
+    context.media_catalog.media_root.mkdir(parents=True, exist_ok=True)
+    app.router.add_get("/media/{filename:.*}", media_file)
     app.router.add_static("/assets/", path=WEB_ASSETS_PATH, name="assets")
 
     runner = web.AppRunner(app)

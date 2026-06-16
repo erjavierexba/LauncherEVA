@@ -12,7 +12,7 @@
     document.getElementById("musicUpButton").addEventListener("click", () => runAction(() => controlMusic("up")));
     document.getElementById("musicDownButton").addEventListener("click", () => runAction(() => controlMusic("down")));
     document.getElementById("musicStopButton").addEventListener("click", () => runAction(() => controlMusic("stop")));
-    document.getElementById("killButton").addEventListener("click", () => runAction(eliminatePlayer));
+    document.getElementById("killButton").addEventListener("click", openKillPlayerModal);
     document.getElementById("generateNamesButton").addEventListener("click", () => runAction(generateNamesAction));
     nameCategorySelect.addEventListener("change", renderNameSubtypeOptions);
     document.getElementById("createNpcButton").addEventListener("click", () => runAction(createNpc));
@@ -79,6 +79,8 @@
     document.getElementById("deleteCharacterButton").addEventListener("click", openDeleteCharacterModal);
     document.getElementById("cancelDeleteCharacterButton").addEventListener("click", closeDeleteCharacterModal);
     document.getElementById("confirmDeleteCharacterButton").addEventListener("click", confirmDeleteCharacter);
+    document.getElementById("cancelKillPlayerButton").addEventListener("click", closeKillPlayerModal);
+    document.getElementById("confirmKillPlayerButton").addEventListener("click", () => runAction(confirmKillPlayer));
     document.getElementById("closeMediaPreviewButton").addEventListener("click", closeMediaPreviewModal);
     document.getElementById("openSettingsButton").addEventListener("click", openSettingsModal);
     document.getElementById("closeSettingsButton").addEventListener("click", closeSettingsModal);
@@ -90,7 +92,7 @@
     submitOnEnter(npcNameInput.closest("section"), () => runAction(createNpc));
     submitOnEnter(mediaTargetSelect.closest("section"), () => runAction(sendMedia));
     submitOnEnter(countdownTargetSelect.closest("section"), () => runAction(startCountdown));
-    submitOnEnter(killPlayerSelect.closest("section"), () => runAction(eliminatePlayer));
+    submitOnEnter(killPlayerSelect.closest("section"), openKillPlayerModal);
     submitOnEnter(nameCategorySelect.closest("section"), () => runAction(generateNamesAction));
     submitOnEnter(initiativeNameInput.closest("section"), addInitiativeCombatant);
     viewTabs.forEach((tab) => {
@@ -127,10 +129,19 @@
             loadStatus();
           }
 
+          if (data.tipo === "THEME_UPDATE") {
+            window.location.reload();
+          }
+
           if (data.tipo === "CHARACTER_SHEET_UPDATE") {
             setStatus(data.mensaje || "Ficha actualizada.");
             applyCharacterSheetUpdateEvent(data);
             loadStatus();
+          }
+
+          if (data.fieldId) {
+            setStatus("Ficha actualizada.");
+            applyCharacterSheetUpdateEvent(data);
           }
         } catch (error) {
           console.warn("Evento websocket inválido", error);

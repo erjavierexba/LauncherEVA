@@ -53,10 +53,7 @@
         name.appendChild(badge);
 
         const sheetFields = personaje.sheet?.fields || [];
-        const favoriteFields = sheetFields.filter((field) => field.favorite);
-        const summaryFields = favoriteFields.length > 0
-          ? favoriteFields
-          : sheetFields.slice(0, 4);
+        const summaryFields = sheetFields.filter((field) => field.favorite);
         const body = document.createElement("div");
 
         if (summaryFields.length > 0) {
@@ -622,10 +619,15 @@
     }
 
     function evaluateFormulaExpression(rawFormula, values = {}, constants = {}) {
+      return evaluateFormulaExpressionInternal(rawFormula, values, constants, 0);
+    }
+
+    function evaluateFormulaExpressionInternal(rawFormula, values = {}, constants = {}, depth = 0) {
+      if (depth > 8) throw new Error("Fórmula demasiado profunda.");
       const formula = String(rawFormula || "").trim();
       if (!formula) throw new Error("Fórmula vacía.");
 
-      const withConstants = resolveFormulaConstants(formula, values, constants);
+      const withConstants = resolveFormulaConstants(formula, values, constants, depth);
       const normalized = withConstants.replace(/\{([a-zA-Z_][\w-]*)\}/g, "$1").replace(/\*([a-zA-Z_][\w-]*)/g, "$1");
       const tokens = tokenizeFormula(normalized, values);
       const output = [];
@@ -680,11 +682,28 @@
         natural: rolls.length === 1 ? rolls[0].total : null,
         modifier: rolls.length === 1 ? total - rolls[0].total : 0,
         diceLabel: rolls.map((roll) => roll.label).join("+"),
-        breakdown: rolls.length ? `${formula} · ${rolls.map((roll) => `${roll.label}[${roll.rolls.join(",")}]`).join(" ")}` : formula,
+        breakdown: formulaBreakdown(tokens, formula),
       };
     }
 
-    function resolveFormulaConstants(formula, values, constants) {
+    function formulaBreakdown(tokens, fallback) {
+      const parts = tokens.map((token) => {
+        if (token.roll) {
+          const label = `${token.roll.label}[${token.roll.rolls.join(",")}]`;
+          return token.value < 0 ? `-${label}` : label;
+        }
+
+        if (token.type === "number") {
+          return String(token.value);
+        }
+
+        return token.value;
+      }).filter(Boolean);
+
+      return parts.length ? parts.join(" ") : fallback;
+    }
+
+    function resolveFormulaConstants(formula, values, constants, depth = 0) {
       return String(formula || "").replace(/\$([a-zA-Z_][\w.-]*)\[([^\]]+)\]/g, (_match, path, keyExpression) => {
         const table = resolveConstantPath(constants, path);
         if (!table || typeof table !== "object") {
@@ -696,8 +715,22 @@
           ? values[valueKey]
           : valueKey;
         const resolved = table[String(resolvedKey)];
-        return String(resolved ?? 0);
+        return String(resolveFormulaConstantValue(resolved, values, constants, depth));
       });
+    }
+
+    function resolveFormulaConstantValue(value, values, constants, depth = 0) {
+      if (typeof value === "number") return value;
+      if (typeof value === "boolean") return value ? 1 : 0;
+
+      const raw = String(value ?? "0").trim();
+      if (!raw) return 0;
+
+      if (/^[+-]?\d+$/.test(raw)) {
+        return parseInt(raw, 10);
+      }
+
+      return evaluateFormulaExpressionInternal(raw, values, constants, depth + 1).total;
     }
 
     function tokenizeFormula(formula, values) {
@@ -789,10 +822,9 @@
         }
 
         applyCharacterSheetUpdateEvent({
-          valor: {
-            characterId,
-            sheet: data.sheet,
-          },
+          character: characterId,
+          fieldId: key,
+          value,
         });
         const character = characters.find((personaje) => String(personaje.id) === String(characterId));
         setStatus(`Ficha actualizada: ${character?.nombre || "personaje"}`);
@@ -992,10 +1024,10 @@
     }
 
     function applyCharacterSheetUpdateEvent(data) {
-      const characterId = data?.valor?.characterId || data?.valor?.character?.id;
-      const sheet = data?.valor?.sheet;
+      const characterId = data?.character || data?.valor?.characterId || data?.valor?.character?.id;
+      const fieldId = data?.fieldId;
 
-      if (!characterId || !sheet) {
+      if (!characterId || !fieldId) {
         return false;
       }
 
@@ -1004,8 +1036,19 @@
         return false;
       }
 
+      const sheet = characters[index].sheet;
+      if (!sheet || !Array.isArray(sheet.fields)) {
+        return false;
+      }
+
+      const nextSheet = {
+        ...sheet,
+        fields: sheet.fields.map((field) => (
+          field.key === fieldId ? { ...field, value: data.value } : field
+        )),
+      };
       characters = characters.map((personaje, currentIndex) => (
-        currentIndex === index ? { ...personaje, sheet } : personaje
+        currentIndex === index ? { ...personaje, sheet: nextSheet } : personaje
       ));
       refreshCharacterViews();
       return true;

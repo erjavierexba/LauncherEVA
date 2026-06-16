@@ -115,6 +115,38 @@
       return data;
     }
 
+    function openKillPlayerModal() {
+      const jugador = killPlayerSelect.value;
+      if (!jugador) {
+        setStatus("Selecciona un jugador.");
+        return;
+      }
+
+      pendingKillPlayer = jugador;
+      killPlayerText.textContent = `Vas a eliminar a "${jugador}" y sus personajes de la mesa. Esta acción no se puede deshacer.`;
+      killPlayerModal.classList.add("open");
+      killPlayerModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeKillPlayerModal() {
+      pendingKillPlayer = null;
+      killPlayerModal.classList.remove("open");
+      killPlayerModal.setAttribute("aria-hidden", "true");
+    }
+
+    async function confirmKillPlayer() {
+      if (!pendingKillPlayer) {
+        return { ok: false, mensaje: "No hay jugador seleccionado." };
+      }
+
+      killPlayerSelect.value = pendingKillPlayer;
+      const data = await eliminatePlayer();
+      closeKillPlayerModal();
+      await loadStatus();
+
+      return data;
+    }
+
     async function createNpc() {
       const fields = {};
       for (const input of npcTemplateFields.querySelectorAll("[data-template-field]")) {

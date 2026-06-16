@@ -5,14 +5,15 @@
   },
   "theme": {
     "title": "Panel EVA",
-    "background": "#0d0f12",
-    "surface": "#1a1f27",
-    "surfaceAlt": "#111419",
-    "text": "#ededed",
-    "muted": "#9fa7b3",
-    "accent": "#c9a24a",
-    "primary": "#66ccff",
-    "danger": "#c65353",
+    "background": "#3d3846",
+    "surface": "#211b2b",
+    "surfaceAlt": "#17111f",
+    "inputBackground": "#120f18",
+    "text": "#f1ecff",
+    "muted": "#b4a7ca",
+    "accent": "#d4a84f",
+    "primary": "#72d1d8",
+    "danger": "#d95d75",
     "radius": "8px"
   },
   "users": [
@@ -64,11 +65,19 @@
   ],
   "project": {
     "roleName": "EVA",
-    "appSubtitle": "EVA mantiene el vinculo abierto"
+    "appSubtitle": "EVA mantiene el vinculo abierto",
+    "repository": "roles/eva"
   },
   "server": {
     "host": "0.0.0.0",
-    "evaPort": 8000,
-    "clientPort": 8080
+    "evaPort": 8200,
+    "clientPort": 8201
+  },
+  "audio": {
+    "inputDeviceId": "",
+    "inputDeviceName": ""
+  },
+  "database": {
+    "maxBackups": 10
   }
 }
