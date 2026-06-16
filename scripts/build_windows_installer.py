@@ -12,7 +12,7 @@ from build_exe import ROOT, main as build_exe
 APP_NAME = "Launcher EVA"
 APP_EXE = "LauncherEVA.exe"
 APP_ID = "{{5E718CF4-41D8-4A9D-8A73-E0C8DA514C55}}"
-VERSION = "0.1.0"
+VERSION = "1.0"
 
 
 def find_inno_setup() -> str | None:

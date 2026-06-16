@@ -9,7 +9,7 @@ from build_exe import ROOT, main as build_exe
 
 
 PACKAGE = "launcher-eva"
-VERSION = "0.1.0"
+VERSION = "1.0"
 
 
 def main() -> int:
