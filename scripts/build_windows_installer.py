@@ -6,12 +6,12 @@ import sys
 import textwrap
 from pathlib import Path
 
-from build_exe import ROOT, main as build_exe
+from build_exe import ROOT, convert_png_to_ico, main as build_exe
 
 
 APP_NAME = "Launcher EVA"
 APP_EXE = "LauncherEVA.exe"
-APP_ID = "{{5E718CF4-41D8-4A9D-8A73-E0C8DA514C55}}"
+APP_ID = "5E718CF4-41D8-4A9D-8A73-E0C8DA514C55"
 VERSION = "1.0"
 
 
@@ -30,9 +30,10 @@ def find_inno_setup() -> str | None:
 
 def build_iss(dist_dir: Path) -> Path:
     iss_path = dist_dir / "LauncherEVA_installer.iss"
-    icon_path = ROOT / "Eva_icon.png"
+    icon_path = convert_png_to_ico(ROOT / "Eva_icon.png") or ROOT / "Eva_icon.png"
     app_path = dist_dir / APP_EXE
     data_dir_name = "Launcher EVA"
+    app_id_literal = "{{" + APP_ID + "}"
 
     iss_path.write_text(
         textwrap.dedent(
@@ -41,11 +42,10 @@ def build_iss(dist_dir: Path) -> Path:
             #define MyAppVersion "{VERSION}"
             #define MyAppPublisher "Launcher EVA"
             #define MyAppExeName "{APP_EXE}"
-            #define MyAppId "{APP_ID}"
             #define MyAppDataDir "{data_dir_name}"
 
             [Setup]
-            AppId={{{{#MyAppId}}}}
+            AppId={app_id_literal}
             AppName={{#MyAppName}}
             AppVersion={{#MyAppVersion}}
             AppPublisher={{#MyAppPublisher}}

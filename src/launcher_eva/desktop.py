@@ -18,10 +18,16 @@ CHECK_INTERVAL_MS = 1200
 STARTUP_TIMEOUT_SECONDS = 45
 
 
+def bundled_root() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parents[2]
+
+
 def app_root() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[2]
+    return bundled_root()
 
 
 def run_eva_child() -> None:
@@ -29,9 +35,13 @@ def run_eva_child() -> None:
         raise SystemExit("Falta ruta de EVA.")
 
     eva_path = Path(sys.argv[2]).resolve()
+    source_root = bundled_root()
     os.chdir(eva_path)
-    sys.path.insert(0, str(eva_path))
-    runpy.run_path(str(eva_path / "main.py"), run_name="__main__")
+    for path in (source_root, source_root / "src", eva_path):
+        string_path = str(path)
+        if string_path not in sys.path:
+            sys.path.insert(0, string_path)
+    runpy.run_path(str(source_root / "main.py"), run_name="__main__")
 
 
 def load_server_settings(root: Path) -> dict:
