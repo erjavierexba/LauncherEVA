@@ -29,12 +29,17 @@ def main() -> int:
     debian = package_root / "DEBIAN"
     opt_dir = package_root / "opt" / "LauncherEVA"
     bin_dir = package_root / "usr" / "bin"
+    applications_dir = package_root / "usr" / "share" / "applications"
+    icons_dir = package_root / "usr" / "share" / "icons" / "hicolor" / "512x512" / "apps"
     debian.mkdir(parents=True)
     opt_dir.mkdir(parents=True)
     bin_dir.mkdir(parents=True)
+    applications_dir.mkdir(parents=True)
+    icons_dir.mkdir(parents=True)
 
     shutil.copyfile(binary, opt_dir / "LauncherEVA")
     (opt_dir / "LauncherEVA").chmod(0o755)
+    shutil.copyfile(ROOT / "Eva_icon.png", icons_dir / "launcher-eva.png")
 
     (debian / "control").write_text(
         textwrap.dedent(
@@ -57,16 +62,55 @@ def main() -> int:
             """\
             #!/usr/bin/env sh
             set -eu
-            APP_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/LauncherEVA"
-            mkdir -p "$APP_HOME"
-            cp /opt/LauncherEVA/LauncherEVA "$APP_HOME/LauncherEVA"
-            chmod +x "$APP_HOME/LauncherEVA"
-            exec "$APP_HOME/LauncherEVA" "$@"
+            exec /opt/LauncherEVA/LauncherEVA "$@"
             """
         ),
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
+
+    cleanup = bin_dir / "launcher-eva-purge-data"
+    cleanup.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env sh
+            set -eu
+            DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/launcher-eva"
+            LEGACY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/LauncherEVA"
+            echo "Se van a borrar los datos locales de Launcher EVA."
+            echo " - $DATA_DIR"
+            echo " - $LEGACY_DIR"
+            printf "Escribe BORRAR para confirmar: "
+            read -r ANSWER
+            if [ "$ANSWER" != "BORRAR" ]; then
+              echo "Cancelado."
+              exit 0
+            fi
+            rm -rf "$DATA_DIR" "$LEGACY_DIR"
+            echo "Datos eliminados."
+            """
+        ),
+        encoding="utf-8",
+    )
+    cleanup.chmod(0o755)
+
+    desktop_file = applications_dir / "launcher-eva.desktop"
+    desktop_file.write_text(
+        textwrap.dedent(
+            """\
+            [Desktop Entry]
+            Type=Application
+            Name=Launcher EVA
+            Comment=Configurador y cliente local para EVA
+            Exec=launcher-eva
+            Icon=launcher-eva
+            Terminal=false
+            Categories=Utility;
+            StartupNotify=true
+            """
+        ),
+        encoding="utf-8",
+    )
 
     output = ROOT / "dist" / f"{PACKAGE}_{VERSION}_amd64.deb"
     return subprocess.call(["dpkg-deb", "--build", str(package_root), str(output)], cwd=ROOT)

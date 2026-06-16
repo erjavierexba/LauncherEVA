@@ -9,9 +9,10 @@ import asyncio
 import os
 import sounddevice as sd
 from src.commands.registry import crear_comando
+from src.services.vosk_model import ensure_vosk_model_in_background, vosk_download_error, vosk_model_dir
 from vosk import Model, KaldiRecognizer, SetLogLevel
 
-MODEL_PATH = "vosk-model-es-0.42"
+MODEL_PATH = str(vosk_model_dir())
 SAMPLE_RATE = 16000
 AUDIO_BLOCK_MS = int(os.getenv("EVA_AUDIO_BLOCK_MS", "100"))
 AUDIO_BLOCK_SIZE = max(400, int(SAMPLE_RATE * AUDIO_BLOCK_MS / 1000))
@@ -405,6 +406,18 @@ async def start_eva(context):
     global comando_activo, last_eva_time
 
     print("[MEDIA] Base URL:", context.media_catalog.base_url)
+    model_path = vosk_model_dir()
+    if not model_path.exists():
+        print(f"[VOSK] Modelo no encontrado en {model_path}. Inicio descarga en segundo plano.")
+        ensure_vosk_model_in_background(print)
+
+    while not model_path.exists():
+        error = vosk_download_error()
+        if error:
+            print(f"[VOSK] Aun no disponible: {error}")
+            ensure_vosk_model_in_background(print)
+        await asyncio.sleep(1)
+
     print("Cargando modelo español...")
     model = Model(MODEL_PATH)
     rec = KaldiRecognizer(model, SAMPLE_RATE)

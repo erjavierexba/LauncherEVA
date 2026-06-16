@@ -51,6 +51,12 @@ Crear ejecutable portable:
 python3 scripts/build_exe.py
 ```
 
+Crear instalador Windows con desinstalador:
+
+```bash
+python3 scripts/build_windows_installer.py
+```
+
 Crear paquete `.deb`:
 
 ```bash
@@ -65,7 +71,10 @@ El configurador propio del launcher se arranca con:
 PYTHONPATH=src python3 -m launcher_eva
 ```
 
-Desde ahí puedes guardar rol, tema, jugadores, archivos, micro y puertos. El configurador escribe en `config/eva.config.json` dentro de este mismo proyecto.
+Desde ahí puedes guardar rol, tema, jugadores, archivos, micro y puertos. Los datos mutables se guardan en la carpeta de usuario:
+
+- Windows: `%APPDATA%\\Launcher EVA`
+- Linux: `~/.local/share/launcher-eva`
 
 ## Puertos
 
@@ -90,6 +99,16 @@ EVA_PORT=8001 EVA_CLIENT_PORT=8081 python3 main.py
 ## Cliente
 
 La web cliente recibe eventos por WebSocket desde EVA y no usa Firebase ni notificaciones push. Desde el panel EVA puedes pulsar `Reset cliente` para forzar que los clientes borren caché y recarguen tema/configuración.
+
+## Limpieza de datos
+
+En Windows, el instalador pregunta durante la desinstalación si quieres borrar también los datos de AppData.
+
+En Linux, tras desinstalar el `.deb`, puedes borrar los datos locales con:
+
+```bash
+launcher-eva-purge-data
+```
 
 ## Dependencias
 

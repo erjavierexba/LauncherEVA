@@ -13,9 +13,7 @@ import tempfile
 import threading
 import time
 import unicodedata
-import urllib.request
 import webbrowser
-import zipfile
 import socket
 from datetime import datetime
 from http import HTTPStatus
@@ -35,6 +33,7 @@ from src.services.app_paths import (
     snapshots_root,
     user_data_dir,
 )
+from src.services.vosk_model import ensure_vosk_model, ensure_vosk_model_in_background, vosk_model_dir
 
 
 APP_TITLE = "Launcher EVA"
@@ -42,9 +41,6 @@ PUBLIC_BRANCH = "public_release"
 CONFIG_FILE = "launcher.config.json"
 PORT = 8787
 SNAPSHOT_ROOT = "managed_releases"
-VOSK_MODEL_DIR = "vosk-model-es-0.42"
-VOSK_MODEL_ZIP = "vosk-model-es-0.42.zip"
-VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-es-0.42.zip"
 
 ALLOWED_MEDIA_EXTENSIONS = {
     ".md",
@@ -313,6 +309,7 @@ class LauncherState:
         self.eva_process: subprocess.Popen | None = None
         self.embedded_mode = False
         self.lock = threading.Lock()
+        ensure_vosk_model_in_background(self.log)
 
     def log(self, message: str) -> None:
         line = f"[{time.strftime('%H:%M:%S')}] {message}"
@@ -513,29 +510,11 @@ class LauncherState:
         self.run_command([executable, "-m", "pip", "install", "-r", "requirements.txt"], eva_path, "EVA")
 
     def ensure_vosk_model(self) -> None:
-        eva_path = self.eva_path()
-        model_dir = eva_path / VOSK_MODEL_DIR
-        zip_path = eva_path / VOSK_MODEL_ZIP
+        model_dir = vosk_model_dir()
         if model_dir.exists():
             self.log(f"[EVA] Modelo Vosk ya disponible: {model_dir}.")
             return
-
-        self.log(f"[EVA] Descargando modelo Vosk desde {VOSK_MODEL_URL}.")
-        try:
-            with urllib.request.urlopen(VOSK_MODEL_URL, timeout=30) as response, zip_path.open("wb") as output:
-                shutil.copyfileobj(response, output)
-        except OSError as error:
-            self.log(f"[EVA] Error descargando Vosk: {error}")
-            return
-
-        self.log("[EVA] Descomprimiendo modelo Vosk.")
-        try:
-            with zipfile.ZipFile(zip_path) as archive:
-                archive.extractall(eva_path)
-        except (OSError, zipfile.BadZipFile) as error:
-            self.log(f"[EVA] Error descomprimiendo Vosk: {error}")
-            return
-        self.log(f"[EVA] Modelo Vosk instalado en {model_dir}.")
+        ensure_vosk_model(self.log)
 
     def ensure_horus_dependencies(self) -> None:
         self.log("[Jugadores] La web de jugadores forma parte de EVA; no hay dependencias Node separadas.")
@@ -1028,6 +1007,7 @@ def render_page() -> str:
     role_name = settings.get("role_name", "EVA")
     role_repository = STATE.role_repository_root()
     eva_running = STATE.embedded_mode or (STATE.eva_process is not None and STATE.eva_process.poll() is None)
+    vosk_ready = vosk_model_dir().exists()
     microphones = microphone_devices()
     selected_microphone = settings.get("microphone_device", "")
     client_port = parse_port(settings.get("client_port"), 8080)
@@ -1118,6 +1098,7 @@ def render_page() -> str:
     .favicon-row {{ grid-column:1 / -1; display:grid; grid-template-columns:58px minmax(0, 1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
     .favicon-preview {{ width:48px; height:48px; border:1px solid #394554; border-radius:8px; object-fit:contain; background:#05070a; padding:6px; }}
     .embedded-note {{ min-height:36px; display:inline-flex; align-items:center; color:var(--muted); font-weight:800; }}
+    .hint {{ margin:8px 0 0; color:var(--muted); font-size:12px; font-weight:800; }}
     table {{ width:100%; border-collapse:collapse; }}
     th, td {{ border-bottom:1px solid #2b3543; padding:8px; text-align:left; vertical-align:top; }}
     th {{ color:var(--muted); font-size:12px; text-transform:uppercase; }}
@@ -1165,6 +1146,7 @@ def render_page() -> str:
       <form class="actions" method="post" action="/pull">
         <button name="target" value="both">Pull public_release</button>
       </form>
+      <p class="hint">Modelo de voz: {'listo' if vosk_ready else 'descargando en segundo plano'}.</p>
       <form class="actions" method="post" action="/open-data-folder"><button>Abrir carpeta de datos</button></form>
       <form class="actions" method="post" action="/apply-release"><button>Reaplicar configuración</button></form>
       {reset_control}
