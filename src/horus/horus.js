@@ -2,15 +2,20 @@ const USER_STORAGE_KEY = "horus.username";
 const MEDIA_SESSION_KEY = "horus.mediaSessionId";
 const MEDIA_STORAGE_KEY = "horus.mediaItems";
 const ROLL_HISTORY_STORAGE_KEY = "horus.rollHistory";
+const PAGE_COLOR_STORAGE_KEY = "horus.pageColors";
 
 let username = localStorage.getItem(USER_STORAGE_KEY) || "";
 let sheet = null;
+let roleName = "";
 let characters = [];
 let allCharacters = [];
 let selectedCharacter = null;
 let mediaItems = [];
 let rollHistory = [];
+let pageColors = {};
 let countdownTimer = null;
+let editingCharacterId = null;
+let pendingDeleteCharacter = null;
 
 const loginView = document.getElementById("loginView");
 const appView = document.getElementById("appView");
@@ -20,6 +25,7 @@ const loginStatus = document.getElementById("loginStatus");
 const playerName = document.getElementById("playerName");
 const statusLine = document.getElementById("statusLine");
 const characterSelectView = document.getElementById("characterSelectView");
+const characterOverview = document.getElementById("characterOverview");
 const characterSelectList = document.getElementById("characterSelectList");
 const sheetList = document.getElementById("sheetList");
 const mediaList = document.getElementById("mediaList");
@@ -30,7 +36,12 @@ const mediaBody = document.getElementById("mediaBody");
 const characterForm = document.getElementById("characterForm");
 const characterNameInput = document.getElementById("characterNameInput");
 const characterNotesInput = document.getElementById("characterNotesInput");
-const characterCrudList = document.getElementById("characterCrudList");
+const characterDeleteDialog = document.getElementById("characterDeleteDialog");
+const characterDeleteTitle = document.getElementById("characterDeleteTitle");
+const characterDeleteMessage = document.getElementById("characterDeleteMessage");
+const cancelCharacterDeleteButton = document.getElementById("cancelCharacterDeleteButton");
+const keepCharacterButton = document.getElementById("keepCharacterButton");
+const confirmCharacterDeleteButton = document.getElementById("confirmCharacterDeleteButton");
 const diceFormulaInput = document.getElementById("diceFormulaInput");
 const diceFormulaResult = document.getElementById("diceFormulaResult");
 const rollHistoryList = document.getElementById("rollHistoryList");
@@ -96,6 +107,47 @@ function saveRollHistory() {
   localStorage.setItem(rollHistoryKey(), JSON.stringify(rollHistory));
 }
 
+function loadPageColors() {
+  pageColors = readJson(pageColorStorageKey(), {});
+}
+
+function pageColorStorageKey() {
+  return `${PAGE_COLOR_STORAGE_KEY}.${username || "anon"}`;
+}
+
+function pageColorKey(item, page) {
+  return [item.id || "sheet", item.schema?.id || "template", page.key || page.label || "page"].join(":");
+}
+
+function pageColorFor(item, page) {
+  return pageColors[pageColorKey(item, page)] || "";
+}
+
+function savePageColor(item, page, color) {
+  const key = pageColorKey(item, page);
+  if (color) {
+    pageColors = { ...pageColors, [key]: color };
+  } else {
+    const next = { ...pageColors };
+    delete next[key];
+    pageColors = next;
+  }
+  localStorage.setItem(pageColorStorageKey(), JSON.stringify(pageColors));
+}
+
+function applyPageAccent(card, color) {
+  if (color) {
+    card.style.setProperty("--page-accent", color);
+  } else {
+    card.style.removeProperty("--page-accent");
+  }
+}
+
+function themeAccentColor() {
+  const value = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#66c6dd";
+}
+
 function addRollHistory(entry) {
   rollHistory = [{ ...entry, at: new Date().toISOString() }, ...rollHistory].slice(0, 200);
   saveRollHistory();
@@ -112,6 +164,7 @@ function showApp() {
   loginView.hidden = true;
   appView.hidden = false;
   playerName.textContent = username;
+  loadPageColors();
   loadRollHistory();
 }
 
@@ -144,6 +197,7 @@ async function refreshState() {
 
   const data = await api(`/load/${encodeURIComponent(username)}`);
   sheet = data.sheet || null;
+  roleName = data.role || document.title || "";
   allCharacters = data.allCharacters || data.characters || [];
   selectedCharacter = data.selectedCharacter || null;
   characters = data.characters || [];
@@ -159,11 +213,134 @@ async function refreshState() {
 }
 
 function renderAll() {
+  renderCharacterOverview();
   renderCharacterSelect();
-  renderCharacterCrud();
   renderSheet();
   renderMedia();
   renderRollHistory();
+}
+
+function renderCharacterOverview() {
+  characterOverview.innerHTML = "";
+
+  const card = document.createElement("div");
+  card.className = selectedCharacter ? "selected-character-card" : "selected-character-card empty-selection";
+
+  const head = document.createElement("div");
+  head.className = "selected-character-head";
+
+  const titleWrap = document.createElement("div");
+  const kicker = document.createElement("span");
+  kicker.className = "selected-character-kicker";
+  kicker.textContent = roleName || "Rol activo";
+  const title = document.createElement("h3");
+  const characterName = selectedCharacter?.nombre || selectedCharacter?.name || "Sin personaje cargado";
+  title.textContent = selectedCharacter ? `${username} / ${characterName}` : `${username || "Jugador"} / Sin personaje`;
+  titleWrap.append(kicker, title);
+
+  const badge = document.createElement("span");
+  badge.className = selectedCharacter ? "selected-character-badge active" : "selected-character-badge";
+  badge.textContent = selectedCharacter ? "Seleccionado" : "Pendiente";
+
+  head.append(titleWrap, badge);
+  card.appendChild(head);
+
+  const facts = document.createElement("div");
+  facts.className = "selected-character-facts";
+
+  if (selectedCharacter) {
+    facts.appendChild(summaryFact("Plantilla", selectedCharacter.template?.label || selectedCharacter.sheet?.template?.label || "Ficha"));
+    const characterRole = selectedCharacter.rol || selectedCharacter.role || "";
+    if (characterRole) facts.appendChild(summaryFact("Concepto", characterRole));
+  } else {
+    facts.appendChild(summaryFact("Personajes", String(allCharacters.length)));
+  }
+  card.appendChild(facts);
+
+  if (selectedCharacter) {
+    const notesForm = document.createElement("form");
+    notesForm.className = "selected-character-notes-form";
+    const notes = document.createElement("textarea");
+    notes.rows = 2;
+    notes.value = selectedCharacter.notes || selectedCharacter.notas || "";
+    notes.placeholder = "Notas del personaje";
+    const saveNotes = document.createElement("button");
+    saveNotes.type = "submit";
+    saveNotes.className = "secondary";
+    saveNotes.textContent = "Guardar notas";
+    notesForm.append(notes, saveNotes);
+    notesForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await updateCharacter(selectedCharacter.id, selectedCharacter.nombre || selectedCharacter.name || "", notes.value);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    });
+    card.appendChild(notesForm);
+  }
+
+  const highlights = selectedCharacter ? characterHighlights(selectedCharacter) : [];
+  if (highlights.length) {
+    const highlightGrid = document.createElement("div");
+    highlightGrid.className = "selected-character-highlights";
+    for (const field of highlights) {
+      highlightGrid.appendChild(summaryFact(field.label || field.key, formatSummaryValue(field.value ?? field.defaultValue ?? "")));
+    }
+    card.appendChild(highlightGrid);
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "selected-character-hint";
+    hint.textContent = selectedCharacter ? "Sin datos destacados todavía." : "Elige un personaje para cargar sus datos.";
+    card.appendChild(hint);
+  }
+
+  if (selectedCharacter) {
+    const actions = document.createElement("div");
+    actions.className = "selected-character-actions";
+    const sheetButton = document.createElement("button");
+    sheetButton.type = "button";
+    sheetButton.textContent = "Ver ficha";
+    sheetButton.addEventListener("click", () => setActiveView("sheet"));
+    actions.appendChild(sheetButton);
+    card.appendChild(actions);
+  }
+
+  characterOverview.appendChild(card);
+}
+
+function summaryFact(label, value) {
+  const item = document.createElement("div");
+  item.className = "summary-fact";
+  const labelNode = document.createElement("span");
+  labelNode.textContent = label;
+  const valueNode = document.createElement("strong");
+  valueNode.textContent = value || "-";
+  item.append(labelNode, valueNode);
+  return item;
+}
+
+function characterHighlights(character) {
+  const fields = character.sheet?.fields || [];
+  const filled = fields.filter((field) => {
+    const value = field.value ?? field.defaultValue ?? "";
+    return formatSummaryValue(value) !== "";
+  });
+  const favorites = filled.filter((field) => field.favorite || field.favourite || field.config?.favorite);
+  return (favorites.length ? favorites : filled).slice(0, 6);
+}
+
+function formatSummaryValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => {
+      if (entry && typeof entry === "object") return objectTitle(entry, [], 0);
+      return String(entry || "");
+    }).filter(Boolean).join(", ");
+  }
+  if (value && typeof value === "object") {
+    return objectTitle(value, [], 0);
+  }
+  return String(value ?? "").trim();
 }
 
 function renderCharacterSelect() {
@@ -175,9 +352,58 @@ function renderCharacterSelect() {
   }
 
   for (const character of allCharacters) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "character-select-card";
+    const isSelected = selectedCharacter && String(selectedCharacter.id) === String(character.id);
+    const isEditing = String(editingCharacterId || "") === String(character.id);
+    const card = document.createElement(isEditing ? "form" : "div");
+    card.className = isSelected ? "character-select-card selected" : "character-select-card";
+    card.dataset.characterId = character.id;
+
+    if (isEditing) {
+      const name = document.createElement("input");
+      name.value = character.nombre || character.name || "";
+      name.placeholder = "Nombre";
+
+      const notes = document.createElement("textarea");
+      notes.value = character.notes || character.notas || "";
+      notes.rows = 2;
+      notes.placeholder = "Notas";
+
+      const actions = document.createElement("div");
+      actions.className = "character-select-actions";
+
+      const save = document.createElement("button");
+      save.type = "submit";
+      save.className = "secondary";
+      save.textContent = "Guardar";
+
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "secondary";
+      cancel.textContent = "Cancelar";
+      cancel.addEventListener("click", () => {
+        editingCharacterId = null;
+        renderCharacterSelect();
+      });
+
+      actions.append(save, cancel);
+      card.append(name, notes, actions);
+      card.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          await updateCharacter(character.id, name.value, notes.value);
+          editingCharacterId = null;
+          renderAll();
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : String(error));
+        }
+      });
+      characterSelectList.appendChild(card);
+      continue;
+    }
+
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "character-select-main";
 
     const name = document.createElement("span");
     name.className = "character-select-name";
@@ -185,11 +411,32 @@ function renderCharacterSelect() {
 
     const meta = document.createElement("span");
     meta.className = "character-select-meta";
-    meta.textContent = character.notes || character.template?.label || "Personaje";
+    meta.textContent = isSelected ? "Seleccionado" : character.notes || character.template?.label || "Personaje";
 
-    button.append(name, meta);
-    button.addEventListener("click", () => selectCharacter(character.id));
-    characterSelectList.appendChild(button);
+    select.append(name, meta);
+    select.addEventListener("click", () => selectCharacter(character.id));
+
+    const actions = document.createElement("div");
+    actions.className = "character-select-actions";
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary";
+    edit.textContent = "Editar";
+    edit.addEventListener("click", () => {
+      editingCharacterId = character.id;
+      renderCharacterSelect();
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "Borrar";
+    remove.addEventListener("click", () => openCharacterDeleteDialog(character));
+
+    actions.append(edit, remove);
+    card.append(select, actions);
+    characterSelectList.appendChild(card);
   }
 }
 
@@ -203,63 +450,17 @@ async function selectCharacter(characterId) {
   setActiveView("sheet");
 }
 
-function renderCharacterCrud() {
-  characterCrudList.innerHTML = "";
-  const editableCharacters = allCharacters.length ? allCharacters : characters;
+function openCharacterDeleteDialog(character) {
+  pendingDeleteCharacter = character;
+  const characterName = character?.nombre || character?.name || "este personaje";
+  characterDeleteTitle.textContent = `Borrar ${characterName}`;
+  characterDeleteMessage.textContent = `Vas a borrar ${characterName}. Esta accion no se puede deshacer.`;
+  characterDeleteDialog.showModal();
+}
 
-  if (!editableCharacters.length) {
-    characterCrudList.appendChild(empty("Sin personajes."));
-    return;
-  }
-
-  for (const character of editableCharacters) {
-    const row = document.createElement("form");
-    row.className = "character-crud-item";
-    row.dataset.characterId = character.id;
-
-    const title = document.createElement("div");
-    title.className = "character-crud-title";
-    title.textContent = `${username} / ${character.nombre}`;
-
-    const name = document.createElement("input");
-    name.value = character.nombre || "";
-    name.placeholder = "Nombre";
-
-    const notes = document.createElement("textarea");
-    notes.value = character.notes || "";
-    notes.rows = 2;
-    notes.placeholder = "Notas";
-
-    const actions = document.createElement("div");
-    actions.className = "character-crud-actions";
-    const save = document.createElement("button");
-    save.type = "submit";
-    save.className = "secondary";
-    save.textContent = "Guardar";
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "danger";
-    remove.textContent = "Eliminar";
-    actions.append(save, remove);
-
-    row.append(title, name, notes, actions);
-    row.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      try {
-        await updateCharacter(character.id, name.value, notes.value);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      }
-    });
-    remove.addEventListener("click", async () => {
-      try {
-        await deleteCharacter(character.id);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      }
-    });
-    characterCrudList.appendChild(row);
-  }
+function closeCharacterDeleteDialog() {
+  pendingDeleteCharacter = null;
+  characterDeleteDialog.close();
 }
 
 async function createCharacter(name, notes) {
@@ -324,6 +525,9 @@ function renderSheet() {
 function renderSheetPages(card, item, activePageIndex = 0) {
   const pages = sheetPages(item);
   const selectedIndex = Math.max(0, Math.min(activePageIndex, pages.length - 1));
+  const activePage = pages[selectedIndex];
+  const activeColor = pageColorFor(item, activePage);
+  applyPageAccent(card, activeColor);
 
   if (pages.length > 1) {
     const tabs = document.createElement("div");
@@ -333,8 +537,10 @@ function renderSheetPages(card, item, activePageIndex = 0) {
       tab.type = "button";
       tab.className = index === selectedIndex ? "secondary active" : "secondary";
       tab.textContent = page.label || page.key || `Página ${index + 1}`;
+      const tabColor = pageColorFor(item, page);
+      if (tabColor) tab.style.setProperty("--page-tab-accent", tabColor);
       tab.addEventListener("click", () => {
-        card.querySelectorAll(".sheet-page-tabs, .sheet-sections").forEach((node) => node.remove());
+        card.querySelectorAll(".sheet-page-tabs, .page-style-tools, .sheet-sections").forEach((node) => node.remove());
         renderSheetPages(card, item, index);
       });
       tabs.appendChild(tab);
@@ -342,11 +548,38 @@ function renderSheetPages(card, item, activePageIndex = 0) {
     card.appendChild(tabs);
   }
 
+  const tools = document.createElement("div");
+  tools.className = "page-style-tools";
+
+  const swatch = document.createElement("input");
+  swatch.type = "color";
+  swatch.className = "page-color-input";
+  swatch.value = activeColor || themeAccentColor();
+  swatch.title = "Color de página";
+  swatch.setAttribute("aria-label", "Color de página");
+  swatch.addEventListener("input", () => {
+    applyPageAccent(card, swatch.value);
+    savePageColor(item, activePage, swatch.value);
+  });
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "secondary page-default-button";
+  reset.textContent = "Por defecto";
+  reset.addEventListener("click", () => {
+    savePageColor(item, activePage, "");
+    card.querySelectorAll(".sheet-page-tabs, .page-style-tools, .sheet-sections").forEach((node) => node.remove());
+    renderSheetPages(card, item, selectedIndex);
+  });
+
+  tools.append(swatch, reset);
+  card.appendChild(tools);
+
   const sectionsNode = document.createElement("div");
   sectionsNode.className = "sheet-sections";
   const fieldsByKey = new Map(item.fields.map((field) => [field.key, field]));
 
-  for (const section of pages[selectedIndex].sections) {
+  for (const section of activePage.sections) {
     const sectionNode = document.createElement("section");
     sectionNode.className = "sheet-section";
     const title = document.createElement("h4");
@@ -1349,6 +1582,7 @@ document.getElementById("refreshButton").addEventListener("click", refreshState)
 document.getElementById("logoutButton").addEventListener("click", () => {
   localStorage.removeItem(USER_STORAGE_KEY);
   username = "";
+  roleName = "";
   allCharacters = [];
   characters = [];
   selectedCharacter = null;
@@ -1367,6 +1601,23 @@ characterForm.addEventListener("submit", async (event) => {
     await createCharacter(characterNameInput.value.trim(), characterNotesInput.value.trim());
     characterNameInput.value = "";
     characterNotesInput.value = "";
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error));
+  }
+});
+cancelCharacterDeleteButton.addEventListener("click", closeCharacterDeleteDialog);
+keepCharacterButton.addEventListener("click", closeCharacterDeleteDialog);
+characterDeleteDialog.addEventListener("close", () => {
+  pendingDeleteCharacter = null;
+});
+confirmCharacterDeleteButton.addEventListener("click", async () => {
+  if (!pendingDeleteCharacter) {
+    return;
+  }
+  const characterId = pendingDeleteCharacter.id;
+  closeCharacterDeleteDialog();
+  try {
+    await deleteCharacter(characterId);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error));
   }

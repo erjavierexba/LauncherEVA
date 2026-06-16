@@ -46,17 +46,18 @@
 
       <section id="characterSelectView" class="view character-select-view active">
         <div class="section-header">
-          <h2>Cargar personaje</h2>
+          <h2>Personaje</h2>
         </div>
+        <div id="characterOverview" class="character-overview"></div>
+        <div class="panel-title">Cambiar personaje</div>
         <div id="characterSelectList" class="character-select-list"></div>
         <div class="character-manager">
-          <div class="panel-title">Personajes</div>
+          <div class="panel-title">Crear personaje</div>
           <form id="characterForm" class="character-form">
             <input id="characterNameInput" autocomplete="off" placeholder="Nombre del personaje" />
             <textarea id="characterNotesInput" rows="2" placeholder="Notas"></textarea>
             <button type="submit">Crear</button>
           </form>
-          <div id="characterCrudList" class="character-crud-list"></div>
         </div>
       </section>
 
@@ -94,6 +95,20 @@
       <button id="closeMediaButton" class="icon-button" type="button">×</button>
     </div>
     <div id="mediaBody" class="media-body"></div>
+  </dialog>
+
+  <dialog id="characterDeleteDialog" class="confirm-dialog">
+    <div class="dialog-header">
+      <h2 id="characterDeleteTitle">Eliminar personaje</h2>
+      <button id="cancelCharacterDeleteButton" class="icon-button" type="button">×</button>
+    </div>
+    <div class="confirm-dialog-body">
+      <p id="characterDeleteMessage">Esta acción no se puede deshacer.</p>
+      <div class="confirm-dialog-actions">
+        <button id="keepCharacterButton" class="secondary" type="button">Cancelar</button>
+        <button id="confirmCharacterDeleteButton" class="danger" type="button">Borrar</button>
+      </div>
+    </div>
   </dialog>
 
   <script>

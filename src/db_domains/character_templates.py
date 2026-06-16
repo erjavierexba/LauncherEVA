@@ -215,28 +215,50 @@ class CharacterTemplatesRepository:
                 ("personaje_basico",),
             )
 
-        basic_id = self._template_id("personaje_basico")
-        self.conn.execute(
-            """
-            UPDATE character_templates
-            SET schema_json = ?, label = ?
-            WHERE key = ?
-            """,
-            (self._serialize_schema(self.BASIC_CHARACTER_SCHEMA), "Personaje básico", "personaje_basico"),
-        )
-        self._ensure_schema_fields(basic_id, self.BASIC_CHARACTER_SCHEMA)
+        self._seed_builtin_schema("personaje_basico", "Personaje básico", self.BASIC_CHARACTER_SCHEMA)
+        pathfinder_id, pathfinder_seeded = self._seed_builtin_schema("pathfinder_2e", "Pathfinder 2e", self.PATHFINDER_2E_SCHEMA)
+        if pathfinder_seeded:
+            self._cleanup_pathfinder_legacy_fields(pathfinder_id)
 
-        pathfinder_id = self._template_id("pathfinder_2e")
-        self.conn.execute(
-            """
-            UPDATE character_templates
-            SET schema_json = ?
-            WHERE key = ?
-            """,
-            (self._serialize_schema(self.PATHFINDER_2E_SCHEMA), "pathfinder_2e"),
-        )
-        self._ensure_schema_fields(pathfinder_id, self.PATHFINDER_2E_SCHEMA)
-        self._cleanup_pathfinder_legacy_fields(pathfinder_id)
+    def _seed_builtin_schema(self, key: str, label: str, schema: dict):
+        row = self.conn.execute(
+            "SELECT id, schema_json FROM character_templates WHERE key = ?",
+            (key,),
+        ).fetchone()
+
+        if row is None:
+            cursor = self.conn.execute(
+                """
+                INSERT INTO character_templates (key, label, schema_json, active)
+                VALUES (?, ?, ?, 0)
+                """,
+                (key, label, self._serialize_schema(schema)),
+            )
+            template_id = cursor.lastrowid
+            self._ensure_schema_fields(template_id, schema)
+            return template_id, True
+
+        if self._is_blank_schema(row["schema_json"]):
+            self.conn.execute(
+                """
+                UPDATE character_templates
+                SET schema_json = ?
+                WHERE id = ?
+                """,
+                (self._serialize_schema(schema), row["id"]),
+            )
+            self._ensure_schema_fields(row["id"], schema)
+            return row["id"], True
+
+        return row["id"], False
+
+    def _is_blank_schema(self, raw_schema: str):
+        try:
+            schema = json.loads(raw_schema or "{}")
+        except Exception:
+            return True
+
+        return not isinstance(schema, dict) or not schema
 
     def _cleanup_pathfinder_legacy_fields(self, template_id: int | None):
         if template_id is None:
@@ -438,13 +460,7 @@ class CharacterTemplatesRepository:
         if row is None:
             return None
 
-        return {
-            "id": row["id"],
-            "key": row["key"],
-            "label": row["label"],
-            "schema": self._parse_schema(row["schema_json"]),
-            "fields": self.fields_for_template(row["id"]),
-        }
+        return self._template_from_row(row, include_active=False)
 
     def fields_for_template(self, template_id: int):
         rows = self.conn.execute(
@@ -558,17 +574,7 @@ class CharacterTemplatesRepository:
             """
         ).fetchall()
 
-        return [
-            {
-                "id": row["id"],
-                "key": row["key"],
-                "label": row["label"],
-                "schema": self._parse_schema(row["schema_json"]),
-                "active": bool(row["active"]),
-                "fields": self.fields_for_template(row["id"]),
-            }
-            for row in rows
-        ]
+        return [self._template_from_row(row) for row in rows]
 
     def create_template(self, key: str, label: str, schema: dict | None = None):
         key = self._clean_key(key)
@@ -664,14 +670,107 @@ class CharacterTemplatesRepository:
         if row is None:
             return None
 
-        return {
+        return self._template_from_row(row)
+
+    def _template_from_row(self, row, include_active: bool = True):
+        fields = self.fields_for_template(row["id"])
+        template = {
             "id": row["id"],
             "key": row["key"],
             "label": row["label"],
-            "schema": self._parse_schema(row["schema_json"]),
-            "active": bool(row["active"]),
-            "fields": self.fields_for_template(row["id"]),
+            "schema": self._schema_for_template(row["key"], row["label"], row["schema_json"], fields),
+            "fields": fields,
         }
+
+        if include_active and "active" in row.keys():
+            template["active"] = bool(row["active"])
+
+        return template
+
+    def _schema_for_template(self, key: str, label: str, raw_schema: str, fields: list[dict]):
+        schema = self._parse_schema(raw_schema)
+        schema_fields = schema.get("fields") if isinstance(schema, dict) else []
+        if isinstance(schema_fields, list) and schema_fields:
+            return schema
+
+        if fields:
+            return self._schema_from_fields(key, label, fields)
+
+        return schema
+
+    def _schema_from_fields(self, key: str, label: str, fields: list[dict]):
+        schema_fields = []
+        groups = {}
+
+        for field in fields:
+            schema_field = self._schema_field_from_template_field(field)
+            schema_fields.append(schema_field)
+            group = field.get("group") or "General"
+            groups.setdefault(group, []).append(field["key"])
+
+        return {
+            "id": key,
+            "name": label,
+            "version": 1,
+            "constants": {},
+            "fields": schema_fields,
+            "pages": [
+                {
+                    "key": "main",
+                    "label": "Principal",
+                    "sections": [
+                        {
+                            "key": self._clean_key(group),
+                            "label": group,
+                            "fields": field_keys,
+                        }
+                        for group, field_keys in groups.items()
+                    ],
+                },
+            ],
+        }
+
+    def _schema_field_from_template_field(self, field: dict):
+        field_type = field.get("type", "text")
+        schema_field = {
+            "key": field["key"],
+            "label": field["label"],
+            "type": "number" if field_type in {"int", "b_int"} else field_type,
+            "default": field.get("defaultValue", ""),
+            "editable": True,
+        }
+
+        if field_type == "b_int":
+            schema_field["display"] = "counter"
+        elif field_type == "array":
+            schema_field["display"] = "list"
+            schema_field["itemTemplate"] = {
+                "fields": [
+                    {
+                        "key": item_field.get("key", ""),
+                        "label": item_field.get("label", ""),
+                        "type": "number" if item_field.get("type") in {"int", "b_int"} else item_field.get("type", "text"),
+                        "default": item_field.get("defaultValue", ""),
+                        "formula": item_field.get("formula", ""),
+                        "options": item_field.get("options", ""),
+                    }
+                    for item_field in field.get("config", {}).get("itemFields", [])
+                ],
+            }
+        elif field_type == "cycle":
+            schema_field["type"] = "select"
+            schema_field["options"] = field.get("config", {}).get("options", "") or field.get("defaultValue", "")
+        elif field_type == "throw":
+            schema_field["type"] = "roll"
+            schema_field["formula"] = field.get("defaultValue", "") or "1d20"
+        elif field_type == "formula":
+            schema_field["type"] = "formula"
+            schema_field["formula"] = field.get("config", {}).get("formula", "") or field.get("defaultValue", "")
+
+        if field.get("favorite"):
+            schema_field["favorite"] = True
+
+        return schema_field
 
     def update_template(self, template_id: int, label: str, fields: list[dict] | None, schema: dict | None = None):
         template = self.get_template(template_id)

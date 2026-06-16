@@ -63,6 +63,66 @@ class PlayersRepositoryTest(unittest.TestCase):
         templates = CharacterTemplatesRepository(conn)
         self.assertEqual(templates.active_template()["key"], "pathfinder_2e")
 
+    def test_builtin_template_edits_survive_repository_restart(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        PlayersRepository(conn, [], templates)
+        basic = templates.active_template()
+        schema = {
+            "id": "personaje_basico",
+            "name": "Personaje básico editado",
+            "fields": [
+                {"key": "reflex_id", "label": "Reflejos", "type": "number", "default": 2, "favorite": True},
+            ],
+            "pages": [
+                {
+                    "key": "main",
+                    "label": "Principal",
+                    "sections": [
+                        {"key": "stats", "label": "Stats", "fields": ["reflex_id"]},
+                    ],
+                },
+            ],
+        }
+
+        updated = templates.update_template(
+            basic["id"],
+            "Personaje básico editado",
+            [{"key": "reflex_id", "label": "Reflejos", "type": "int", "defaultValue": "2", "favorite": True}],
+            schema,
+        )
+        self.assertTrue(updated["ok"])
+
+        templates = CharacterTemplatesRepository(conn)
+        basic = templates.get_template(basic["id"])
+
+        self.assertEqual(basic["label"], "Personaje básico editado")
+        self.assertEqual(basic["schema"]["name"], "Personaje básico editado")
+        self.assertEqual([field["key"] for field in basic["fields"]], ["reflex_id"])
+        self.assertTrue(basic["fields"][0]["favorite"])
+
+    def test_template_with_empty_schema_json_is_rebuilt_from_fields(self):
+        conn = self.create_connection()
+        templates = CharacterTemplatesRepository(conn)
+        PlayersRepository(conn, [], templates)
+        basic = templates.active_template()
+        updated = templates.update_template(
+            basic["id"],
+            "Personaje básico",
+            [
+                {"key": "campo_1", "label": "Texto 1", "type": "text", "group": "Sección 1"},
+                {"key": "campo_2", "label": "Número 2", "type": "int", "defaultValue": "0", "group": "Principal"},
+            ],
+            {"id": "personaje_basico", "name": "Personaje básico", "version": 1, "fields": [], "pages": []},
+        )
+        self.assertTrue(updated["ok"])
+
+        template = templates.get_template(basic["id"])
+
+        self.assertEqual([field["key"] for field in template["schema"]["fields"]], ["campo_1", "campo_2"])
+        self.assertEqual(template["schema"]["pages"][0]["sections"][0]["fields"], ["campo_1"])
+        self.assertEqual(template["schema"]["pages"][0]["sections"][1]["fields"], ["campo_2"])
+
     def test_creates_multiple_characters_for_player_and_template(self):
         conn = self.create_connection()
         templates = CharacterTemplatesRepository(conn)
