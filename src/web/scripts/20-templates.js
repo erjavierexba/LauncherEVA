@@ -39,12 +39,28 @@
       return templates.find((template) => String(template.id) === templateSelect.value) || templates[0] || null;
     }
 
+    function activeTemplateSchema(template) {
+      if (!template) {
+        return null;
+      }
+
+      const key = template.key || templateKeyFromLabel(template.label);
+      return normalizeBuilderSchema(template.schema || schemaFromTemplateFields(key, template.label, template.fields || []));
+    }
+
+    function updateTemplateControls() {
+      const template = selectedTemplate();
+      const selected = Boolean(template);
+      activateTemplateButton.disabled = !selected || Boolean(template?.active);
+      exportTemplateButton.disabled = !selected;
+    }
+
     function renderTemplateEditor() {
       const template = selectedTemplate();
       templateFieldsEditor.innerHTML = "";
-      templateLabelInput.value = template?.label || "";
 
       if (!template) {
+        updateTemplateControls();
         return;
       }
 
@@ -61,6 +77,8 @@
       if (!fields.length) {
         templateFieldsEditor.appendChild(createTemplateEmptyState(template));
       }
+
+      updateTemplateControls();
     }
 
     function createTemplateEmptyState(template) {
@@ -1394,10 +1412,10 @@
       templateJsonStatus.classList.toggle("error", !ok);
     }
 
-    function openTemplateJsonModal(mode) {
+    function openTemplateJsonModal(mode, importedSchema = null) {
       const template = selectedTemplate();
       templateJsonMode = mode;
-      templateJsonSourceId = template?.id || null;
+      templateJsonSourceId = mode === "import" ? null : (template?.id || null);
       templateKeyEdited = false;
       templateJsonKeyInput.disabled = mode === "edit";
       templateJsonStatus.textContent = "";
@@ -1417,11 +1435,20 @@
         templateJsonKeyInput.value = key;
         templateJsonLabelInput.value = label;
         templateJsonTextarea.value = formatJson(template.schema || defaultSystemSchema(key, label));
+      } else if (mode === "import" && importedSchema) {
+        const schema = normalizeBuilderSchema(importedSchema);
+        const label = schema.name || "Manual importado";
+        const key = schema.id || templateKeyFromLabel(label);
+        templateJsonModalTitle.textContent = "Importar manual";
+        templateJsonKeyInput.disabled = false;
+        templateJsonKeyInput.value = key;
+        templateJsonLabelInput.value = label;
+        templateJsonTextarea.value = formatJson(schema);
       } else if (template) {
         const key = template.key || templateKeyFromLabel(template.label);
         templateJsonModalTitle.textContent = "Editar manual";
         templateJsonKeyInput.value = key;
-        templateJsonLabelInput.value = templateLabelInput.value || template.label;
+        templateJsonLabelInput.value = template.label;
         templateJsonTextarea.value = formatJson(template.schema || schemaFromTemplateFields(key, template.label, template.fields || []));
       } else {
         return;
@@ -1466,7 +1493,7 @@
 
     function syncTemplateJsonFromFields() {
       const key = templateJsonKeyInput.value || selectedTemplate()?.key || "sistema";
-      const label = templateJsonLabelInput.value || templateLabelInput.value || "Sistema";
+      const label = templateJsonLabelInput.value || selectedTemplate()?.label || "Sistema";
       const schema = schemaFromTemplateFields(key, label, readTemplateFieldsEditor());
       templateJsonTextarea.value = formatJson(schema);
       renderTemplateBuilder(schema);
@@ -1503,7 +1530,7 @@
       const fields = compatibilityFieldsFromSchema(schema);
       let data;
 
-      if (templateJsonMode === "create") {
+      if (templateJsonMode === "create" || templateJsonMode === "import") {
         data = await api("/api/templates", { key, label, schema });
       } else if (templateJsonMode === "duplicate") {
         data = await api(`/api/templates/${templateJsonSourceId}/duplicate`, { key, label, schema });
@@ -1549,6 +1576,43 @@
       return { ok: true, mensaje: "Builder de manual abierto." };
     }
 
+    async function exportTemplate() {
+      const template = selectedTemplate();
+      if (!template) return { ok: false, mensaje: "No hay plantilla seleccionada." };
+
+      const schema = activeTemplateSchema(template);
+      if (!schema) return { ok: false, mensaje: "No se pudo preparar la plantilla." };
+
+      const blob = new Blob([formatJson(schema)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const fileKey = template.key || templateKeyFromLabel(template.label);
+      link.href = url;
+      link.download = `${fileKey || "manual"}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      return { ok: true, mensaje: `Plantilla exportada: ${link.download}.` };
+    }
+
+    function triggerTemplateImport() {
+      templateImportInput.value = "";
+      templateImportInput.click();
+    }
+
+    async function importTemplateFile(file) {
+      if (!file) {
+        return { ok: false, mensaje: "No se seleccionó ningún archivo." };
+      }
+
+      const text = await file.text();
+      const schema = normalizeBuilderSchema(JSON.parse(text));
+      openTemplateJsonModal("import", schema);
+      return { ok: true, mensaje: "Plantilla importada en el builder." };
+    }
+
     async function duplicateTemplate() {
       if (!selectedTemplate()) return { ok: false, mensaje: "No hay plantilla seleccionada." };
       openTemplateJsonModal("duplicate");
@@ -1559,29 +1623,6 @@
       if (!selectedTemplate()) return { ok: false, mensaje: "No hay plantilla seleccionada." };
       openTemplateJsonModal("edit");
       return { ok: true, mensaje: "Builder de manual abierto." };
-    }
-
-    async function saveTemplate() {
-      const template = selectedTemplate();
-      if (!template) return { ok: false, mensaje: "No hay plantilla seleccionada." };
-
-      const response = await fetch(`/api/templates/${template.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: templateLabelInput.value,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || data.ok === false) {
-        throw new Error(data.mensaje || `HTTP ${response.status}`);
-      }
-
-      await loadTemplates(template.id);
-      await loadStatus();
-
-      return { ok: true, mensaje: "Plantilla guardada." };
     }
 
     async function activateTemplate() {

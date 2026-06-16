@@ -20,13 +20,13 @@
         <h2>Manuales</h2>
         <div class="command-body">
           <div class="grid">
-            <div>
+            <div class="span2">
               <label>Manual</label>
-              <select id="templateSelect"></select>
-            </div>
-            <div>
-              <label>Nombre visible</label>
-              <input id="templateLabelInput" placeholder="Pathfinder 2e" />
+              <div class="template-inline-actions">
+                <select id="templateSelect"></select>
+                <button id="activateTemplateButton" class="secondary" type="button">Activar</button>
+                <button id="exportTemplateButton" class="secondary" type="button">Exportar JSON</button>
+              </div>
             </div>
           </div>
           <div id="templateFieldsEditor" class="field-editor-list" hidden></div>
@@ -35,12 +35,12 @@
           </div>
           <div class="command-actions">
             <button id="createTemplateButton" class="secondary">Nuevo manual</button>
+            <button id="importTemplateButton" class="secondary" type="button">Importar JSON</button>
             <button id="duplicateTemplateButton" class="secondary">Duplicar</button>
             <button id="editTemplateJsonButton" class="secondary">Abrir builder</button>
-            <button id="activateTemplateButton" class="secondary">Activar</button>
-            <button id="saveTemplateButton">Guardar nombre</button>
             <button id="deleteTemplateButton" class="danger">Eliminar</button>
           </div>
+          <input id="templateImportInput" type="file" accept=".json,application/json" hidden />
         </div>
       </section>
 

@@ -3,9 +3,9 @@ import signal
 import socket
 
 from src.app_context import close_app_context, create_app_context, set_app_context
-from src.eva import start_eva
 from src.horus_server import start_horus_server
 from src.services.app_config import AppConfig
+from src.services.vosk_model import ensure_vosk_model_in_background
 from src.web_server import start_web_server
 
 
@@ -64,10 +64,17 @@ async def main():
         except (NotImplementedError, RuntimeError):
             pass
 
+    async def start_voice_service():
+        await asyncio.sleep(0)
+        ensure_vosk_model_in_background(print)
+        from src.eva import start_eva
+
+        await start_eva(context)
+
     tasks = [
         asyncio.create_task(start_web_server(context), name="eva-web"),
         asyncio.create_task(start_horus_server(context), name="horus-web"),
-        asyncio.create_task(start_eva(context), name="eva-core"),
+        asyncio.create_task(start_voice_service(), name="eva-core"),
     ]
 
     try:

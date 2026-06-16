@@ -13,7 +13,7 @@ from launcher_eva.web_app import render_page as render_launcher_page
 from src.commands.musica import MUSIC_MAP
 from src.domain.name_generator import FANTASY_RACE_LABELS, HUMAN_NAME_SETS, generate_names
 from src.domain.players import normalizar
-from src.services.app_paths import data_assets_root, open_in_file_manager, user_data_dir
+from src.services.app_paths import app_icon_path, data_assets_root, open_in_file_manager, user_data_dir
 from src.services.network import get_base_url
 from src.ws_server import start_ws_loop, stop_ws_loop, websocket_handler
 
@@ -335,7 +335,14 @@ async def asset_file(request):
 
 async def favicon(request):
     custom = data_assets_root() / FAVICON_PATH.name
-    return web.FileResponse(custom if custom.exists() else FAVICON_PATH, headers=no_store_headers())
+    if custom.exists():
+        return web.FileResponse(custom, headers=no_store_headers())
+
+    icon = app_icon_path()
+    if icon.exists():
+        return web.FileResponse(icon, headers=no_store_headers())
+
+    return web.FileResponse(FAVICON_PATH, headers=no_store_headers())
 
 
 async def index_css(request):

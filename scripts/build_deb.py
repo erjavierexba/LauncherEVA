@@ -5,7 +5,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from build_exe import ROOT, main as build_exe
+from build_exe import ROOT, build_binary
 
 
 PACKAGE = "launcher-eva"
@@ -13,16 +13,28 @@ VERSION = "1.0"
 
 
 def main() -> int:
-    code = build_exe()
+    package_root = ROOT / "build" / "deb" / PACKAGE
+    pyinstaller_root = ROOT / "build" / "deb-pyinstaller"
+    dist_dir = pyinstaller_root / "dist"
+    work_dir = pyinstaller_root / "work"
+    spec_dir = pyinstaller_root / "spec"
+
+    if pyinstaller_root.exists():
+        shutil.rmtree(pyinstaller_root)
+
+    code = build_binary(
+        distpath=dist_dir,
+        workpath=work_dir,
+        specpath=spec_dir,
+    )
     if code != 0:
         return code
 
-    binary = ROOT / "dist" / "LauncherEVA"
+    binary = dist_dir / "LauncherEVA"
     if not binary.exists():
         print(f"No existe {binary}")
         return 1
 
-    package_root = ROOT / "build" / "deb" / PACKAGE
     if package_root.exists():
         shutil.rmtree(package_root)
 
@@ -114,7 +126,14 @@ def main() -> int:
     )
 
     output = ROOT / "dist" / f"{PACKAGE}_{VERSION}_amd64.deb"
-    return subprocess.call(["dpkg-deb", "--build", str(package_root), str(output)], cwd=ROOT)
+    if output.exists():
+        output.unlink()
+
+    try:
+        return subprocess.call(["dpkg-deb", "--build", str(package_root), str(output)], cwd=ROOT)
+    finally:
+        if pyinstaller_root.exists():
+            shutil.rmtree(pyinstaller_root)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,10 @@
     const settingsModal = document.getElementById("settingsModal");
     const panelOptions = document.getElementById("panelOptions");
     const templateSelect = document.getElementById("templateSelect");
-    const templateLabelInput = document.getElementById("templateLabelInput");
+    const activateTemplateButton = document.getElementById("activateTemplateButton");
+    const exportTemplateButton = document.getElementById("exportTemplateButton");
+    const importTemplateButton = document.getElementById("importTemplateButton");
+    const templateImportInput = document.getElementById("templateImportInput");
     const templateFieldsEditor = document.getElementById("templateFieldsEditor");
     const templateJsonModal = document.getElementById("templateJsonModal");
     const templateJsonModalTitle = document.getElementById("templateJsonModalTitle");

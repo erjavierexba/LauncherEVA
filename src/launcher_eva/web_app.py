@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 from src.services.network import get_base_url
 from src.services.app_paths import (
     app_config_path,
+    app_icon_path,
     code_root,
     data_assets_root,
     ensure_app_data_layout,
@@ -41,6 +42,7 @@ PUBLIC_BRANCH = "public_release"
 CONFIG_FILE = "launcher.config.json"
 PORT = 8787
 SNAPSHOT_ROOT = "managed_releases"
+MAX_CONTROLLER_LOG_LINES = 10000
 
 ALLOWED_MEDIA_EXTENSIONS = {
     ".md",
@@ -315,7 +317,8 @@ class LauncherState:
         line = f"[{time.strftime('%H:%M:%S')}] {message}"
         with self.lock:
             self.logs.append(line)
-            self.logs = self.logs[-600:]
+            if len(self.logs) > MAX_CONTROLLER_LOG_LINES:
+                self.logs = self.logs[-MAX_CONTROLLER_LOG_LINES:]
         print(line)
 
     def save_settings(self, form: dict[str, str]) -> None:
@@ -345,11 +348,16 @@ class LauncherState:
     def role_repository_root(self) -> Path:
         return roles_root() / app_slug(self.role_name())
 
-    def favicon_path(self) -> Path:
-        path = data_assets_root() / FAVICON_PATH.name
-        if path.exists():
-            return path
-        return app_root() / FAVICON_PATH
+    def favicon_source_path(self) -> Path:
+        icon = app_icon_path()
+        if icon.exists():
+            return icon
+
+        bundled = app_root() / FAVICON_PATH
+        if bundled.exists():
+            return bundled
+
+        return data_assets_root() / FAVICON_PATH.name
 
     def aliases_path(self) -> Path:
         return self.media_root() / "aliases.json"
@@ -372,6 +380,8 @@ class LauncherState:
         env["EVA_DB_PATH"] = str(self.role_repository_root() / "eva.sqlite3")
         env["EVA_DB_MAX_BACKUPS"] = str(self.db_max_backups())
         env["EVA_MEDIA_ROOT"] = str(self.media_root())
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
         return env
 
     def run_command(self, command: list[str], cwd: Path, label: str) -> int:
@@ -382,6 +392,7 @@ class LauncherState:
                 cwd=str(cwd),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                bufsize=1,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
@@ -570,13 +581,14 @@ class LauncherState:
         else:
             venv_python = eva_path / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             executable = str(venv_python if venv_python.exists() else Path(sys.executable))
-            command = [executable, "main.py"]
+            command = [executable, "-u", "main.py"]
         self.log(f"Arrancando EVA con {' '.join(command)}")
         self.eva_process = subprocess.Popen(
             command,
             cwd=eva_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            bufsize=1,
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -758,16 +770,6 @@ class LauncherState:
         shutil.copyfile(upload_path, destination)
         self.log("Música de intro actualizada: assets/music/despertar.mp3.")
 
-    def set_favicon_upload(self, upload_path: Path, original_name: str) -> None:
-        if Path(original_name).suffix.lower() != ".png":
-            self.log("El favicon debe ser un PNG.")
-            return
-
-        destination = self.favicon_path()
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(upload_path, destination)
-        self.log("Favicon actualizado para EVA y la web de jugadores.")
-
     def role_name(self) -> str:
         return self.settings.get("role_name", "").strip() or "EVA"
 
@@ -842,13 +844,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_text("\n".join(STATE.logs))
             return
         if path in {"/favicon.png", "/favicon.ico"}:
-            self.send_file(STATE.favicon_path(), "image/png")
+            self.send_file(STATE.favicon_source_path(), "image/png")
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path in {"/media/upload", "/intro/upload", "/favicon/upload", "/theme"}:
+        if path in {"/media/upload", "/intro/upload", "/theme"}:
             form, files = self.multipart()
         else:
             form = self.form()
@@ -907,11 +909,6 @@ class Handler(BaseHTTPRequestHandler):
             upload = files.get("file")
             if upload:
                 STATE.set_intro_upload(upload["path"], upload["filename"])
-                upload["path"].unlink(missing_ok=True)
-        elif path == "/favicon/upload":
-            upload = files.get("file")
-            if upload:
-                STATE.set_favicon_upload(upload["path"], upload["filename"])
                 upload["path"].unlink(missing_ok=True)
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -1012,9 +1009,7 @@ def render_page() -> str:
     selected_microphone = settings.get("microphone_device", "")
     client_port = parse_port(settings.get("client_port"), 8080)
     client_address = get_base_url(client_port).removeprefix("http://").removeprefix("https://")
-    favicon_path = STATE.favicon_path()
-    favicon_version = int(favicon_path.stat().st_mtime) if favicon_path.exists() else int(time.time())
-    log_text = "\n".join(STATE.logs[-180:])
+    log_text = "\n".join(STATE.logs)
     preset_buttons = "".join(
         f'<button name="preset" value="{h(key)}">{h(value["label"])}</button>'
         for key, value in THEME_PRESETS.items()
@@ -1039,7 +1034,7 @@ def render_page() -> str:
     )
     if STATE.embedded_mode:
         runtime_controls = (
-            '<span class="embedded-note">EVA está arrancada desde main.py</span>'
+            '<span class="embedded-note">EVA se está ejecutando en modo integrado</span>'
         )
         reset_control = '<form class="actions" method="post" action="/client/reset"><button>Reset cliente</button></form>'
     else:
@@ -1095,8 +1090,6 @@ def render_page() -> str:
     .client-share span {{ grid-column:1 / -1; color:var(--muted); font-size:12px; font-weight:800; }}
     .client-share strong {{ min-width:0; overflow:hidden; color:var(--accent); font-size:16px; text-overflow:ellipsis; white-space:nowrap; }}
     .client-share button {{ min-width:98px; }}
-    .favicon-row {{ grid-column:1 / -1; display:grid; grid-template-columns:58px minmax(0, 1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
-    .favicon-preview {{ width:48px; height:48px; border:1px solid #394554; border-radius:8px; object-fit:contain; background:#05070a; padding:6px; }}
     .embedded-note {{ min-height:36px; display:inline-flex; align-items:center; color:var(--muted); font-weight:800; }}
     .hint {{ margin:8px 0 0; color:var(--muted); font-size:12px; font-weight:800; }}
     table {{ width:100%; border-collapse:collapse; }}
@@ -1135,13 +1128,6 @@ def render_page() -> str:
         </div>
         <label class="span2">Microfono EVA<select name="microphone_device">{microphone_options}</select></label>
         <div class="actions span2"><button class="primary">Guardar configuración y propagar</button></div>
-      </form>
-      <form class="grid" method="post" action="/favicon/upload" enctype="multipart/form-data">
-        <div class="favicon-row">
-          <img class="favicon-preview" src="/favicon.png?v={favicon_version}" alt="">
-          <label>Favicon de la web de jugadores y EVA<input type="file" name="file" accept="image/png"></label>
-          <button>Guardar favicon</button>
-        </div>
       </form>
       <form class="actions" method="post" action="/pull">
         <button name="target" value="both">Pull public_release</button>

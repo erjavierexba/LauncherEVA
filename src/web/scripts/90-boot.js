@@ -21,11 +21,26 @@
       templateFieldsEditor.appendChild(createFieldEditorRow({ sortOrder: templateFieldsEditor.children.length * 10 + 10 }));
     });
     document.getElementById("createTemplateButton").addEventListener("click", () => runAction(createTemplate));
+    document.getElementById("importTemplateButton").addEventListener("click", triggerTemplateImport);
     document.getElementById("duplicateTemplateButton").addEventListener("click", () => runAction(duplicateTemplate));
     document.getElementById("editTemplateJsonButton").addEventListener("click", () => runAction(editTemplateJson));
-    document.getElementById("saveTemplateButton").addEventListener("click", () => runAction(saveTemplate));
     document.getElementById("activateTemplateButton").addEventListener("click", () => runAction(activateTemplate));
+    document.getElementById("exportTemplateButton").addEventListener("click", () => runAction(exportTemplate));
     document.getElementById("deleteTemplateButton").addEventListener("click", () => runAction(deleteTemplate));
+    templateImportInput.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) {
+        return;
+      }
+      try {
+        const result = await importTemplateFile(file);
+        setStatus(result.mensaje || "Plantilla importada.");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        event.target.value = "";
+      }
+    });
     document.getElementById("closeTemplateJsonButton").addEventListener("click", closeTemplateJsonModal);
     document.getElementById("openTemplateHelpButton").addEventListener("click", openTemplateHelpModal);
     document.getElementById("closeTemplateHelpButton").addEventListener("click", closeTemplateHelpModal);

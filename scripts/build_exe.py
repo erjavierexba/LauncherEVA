@@ -51,7 +51,13 @@ def convert_png_to_ico(source: Path) -> Path | None:
     return None
 
 
-def main() -> int:
+def build_binary(
+    *,
+    name: str = "LauncherEVA",
+    distpath: Path | None = None,
+    workpath: Path | None = None,
+    specpath: Path | None = None,
+) -> int:
     hidden_imports = [
         "aiohttp",
         "audioop",
@@ -66,14 +72,29 @@ def main() -> int:
         "vosk",
     ]
 
+    resolved_distpath = distpath or (ROOT / "dist")
+    resolved_workpath = workpath or (ROOT / "build" / "pyinstaller")
+    resolved_specpath = specpath or resolved_workpath
+    resolved_distpath.mkdir(parents=True, exist_ok=True)
+    resolved_workpath.mkdir(parents=True, exist_ok=True)
+    resolved_specpath.mkdir(parents=True, exist_ok=True)
+
     command = [
         sys.executable,
         "-m",
         "PyInstaller",
+        "--noconfirm",
+        "--clean",
         "--name",
-        "LauncherEVA",
+        name,
         "--onefile",
         "--windowed",
+        "--distpath",
+        str(resolved_distpath),
+        "--workpath",
+        str(resolved_workpath),
+        "--specpath",
+        str(resolved_specpath),
         "--paths",
         str(ROOT / "src"),
         "--collect-binaries",
@@ -86,12 +107,13 @@ def main() -> int:
         *add_data_args(ROOT / "requirements.txt", "."),
         *add_data_args(ROOT / "Eva_icon.png", "."),
         *add_data_args(ROOT / "src", "src"),
-        *add_data_args(ROOT / "config", "config"),
-        *add_data_args(ROOT / "media", "media"),
-        *add_data_args(ROOT / "assets", "assets"),
         str(ROOT / "src" / "launcher_eva" / "desktop.py"),
     ]
     return subprocess.call(command, cwd=ROOT)
+
+
+def main() -> int:
+    return build_binary()
 
 
 if __name__ == "__main__":
