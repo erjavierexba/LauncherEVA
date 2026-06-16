@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes.util
 import os
 import platform
 import runpy
@@ -104,6 +105,16 @@ def wait_for_url(url: str, timeout: int = STARTUP_TIMEOUT_SECONDS) -> bool:
         except Exception:
             time.sleep(0.35)
     return False
+
+
+def can_use_qt_desktop() -> tuple[bool, str]:
+    system = platform.system().lower()
+    if system == "linux" and ctypes.util.find_library("xcb-cursor") is None:
+        return (
+            False,
+            "Falta libxcb-cursor0 para abrir la ventana local. Se usará el navegador.",
+        )
+    return True, ""
 
 
 def is_lan_host(host: str) -> bool:
@@ -220,16 +231,23 @@ def main() -> None:
     controller = EvaDesktopController(root)
     controller.start()
 
+    qt_ready, qt_reason = can_use_qt_desktop()
     try:
         from PySide6.QtCore import QTimer, QUrl
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
     except ImportError:
+        qt_ready = False
+        qt_reason = qt_reason or "No se ha podido cargar PySide6."
+
+    if not qt_ready:
         url = config_url(controller.settings)
         wait_for_url(url)
         webbrowser.open(url)
         print(f"Configurador EVA: {url}")
         print(f"Cliente jugadores: {client_url(controller.settings)}")
+        if qt_reason:
+            print(qt_reason)
         advice = firewall_advice(controller.settings)
         if advice:
             print(f"\n{advice}\n")

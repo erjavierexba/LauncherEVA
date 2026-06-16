@@ -50,6 +50,7 @@ def main() -> int:
             Priority: optional
             Architecture: amd64
             Maintainer: Launcher EVA
+            Depends: libxcb-cursor0
             Description: Launcher local autocontenido para EVA y cliente web
             """
         ),

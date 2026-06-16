@@ -54,6 +54,8 @@ def convert_png_to_ico(source: Path) -> Path | None:
 def main() -> int:
     hidden_imports = [
         "aiohttp",
+        "audioop",
+        "cgi",
         "pygame",
         "PySide6.QtCore",
         "PySide6.QtWebEngineWidgets",
@@ -74,6 +76,10 @@ def main() -> int:
         "--windowed",
         "--paths",
         str(ROOT / "src"),
+        "--collect-binaries",
+        "vosk",
+        "--collect-data",
+        "vosk",
         *build_icon_arg(),
         *[arg for module in hidden_imports for arg in ("--hidden-import", module)],
         *add_data_args(ROOT / "main.py", "."),
