@@ -11,6 +11,8 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from src.services.app_paths import app_config_path, app_icon_path
+
 
 CHECK_INTERVAL_MS = 1200
 STARTUP_TIMEOUT_SECONDS = 45
@@ -48,7 +50,7 @@ def load_server_settings(root: Path) -> dict:
 
 
 def config_path(root: Path) -> Path:
-    return root / "config" / "eva.config.json"
+    return app_config_path()
 
 
 def config_url(settings: dict) -> str:
@@ -231,9 +233,18 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Launcher EVA")
+    icon_path = app_icon_path()
+    if icon_path.exists():
+        from PySide6.QtGui import QIcon
+
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     window = QMainWindow()
     window.setWindowTitle("Launcher EVA")
+    if icon_path.exists():
+        from PySide6.QtGui import QIcon
+
+        window.setWindowIcon(QIcon(str(icon_path)))
     view = QWebEngineView()
     controller.view = view
     window.setCentralWidget(view)

@@ -12,10 +12,12 @@ DB_PATH = Path(os.environ.get("EVA_DB_PATH") or "eva.sqlite3")
 
 class DB:
     def __init__(self, db_path=DB_PATH, initial_users=None, max_backups=None):
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = Path(db_path)
+        self.closed = False
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.max_backups = self._resolve_max_backups(max_backups)
-        self._backup_existing_db(db_path)
-        self.conn = sqlite3.connect(db_path)
+        self._backup_existing_db(self.db_path)
+        self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
 
         self.character_templates = CharacterTemplatesRepository(self.conn)
@@ -61,3 +63,14 @@ class DB:
         for backup in backups_to_delete:
             if backup.is_file():
                 backup.unlink()
+
+    def close(self, backup: bool = True):
+        if self.closed:
+            return
+
+        self.conn.commit()
+        self.conn.close()
+        self.closed = True
+
+        if backup:
+            self._backup_existing_db(self.db_path)

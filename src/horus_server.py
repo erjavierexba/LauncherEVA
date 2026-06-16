@@ -5,10 +5,9 @@ from pathlib import Path
 from aiohttp import web
 
 from src.web_server import (
-    FAVICON_PATH,
-    WEB_ASSETS_PATH,
     api_character_sheet_update,
     api_character_sheet_update_by_id,
+    asset_file,
     api_character_delete,
     api_character_select,
     api_character_update,
@@ -19,6 +18,7 @@ from src.web_server import (
     login,
     media_file,
     no_store_headers,
+    favicon as web_favicon,
     theme_style,
 )
 
@@ -70,7 +70,7 @@ async def horus_js(request):
 
 
 async def favicon(request):
-    return web.FileResponse(FAVICON_PATH)
+    return await web_favicon(request)
 
 
 async def start_horus_server(context):
@@ -95,7 +95,7 @@ async def start_horus_server(context):
     app.router.add_post("/api/dice-rolls", api_dice_roll_create)
     context.media_catalog.media_root.mkdir(parents=True, exist_ok=True)
     app.router.add_get("/media/{filename:.*}", media_file)
-    app.router.add_static("/assets/", path=WEB_ASSETS_PATH, name="assets")
+    app.router.add_get("/assets/{filename:.*}", asset_file)
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -105,4 +105,7 @@ async def start_horus_server(context):
 
     print(f"[CLIENTE] Web de jugadores en http://localhost:{context.horus_port}")
 
-    await asyncio.Event().wait()
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()

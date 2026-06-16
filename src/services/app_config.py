@@ -6,9 +6,10 @@ import re
 from pathlib import Path
 
 from src.domain.players import normalizar
+from src.services.app_paths import app_config_path, ensure_app_data_layout, resolve_data_relative
 
 
-CONFIG_PATH = Path("config/eva.config.json")
+CONFIG_PATH = app_config_path()
 
 DEFAULT_CONFIG = {
     "assistant": {
@@ -47,6 +48,7 @@ DEFAULT_CONFIG = {
 
 class AppConfig:
     def __init__(self, path: Path = CONFIG_PATH):
+        ensure_app_data_layout()
         self.path = Path(path)
         self.data = self.load()
 
@@ -91,7 +93,7 @@ class AppConfig:
 
     def role_repository_root(self):
         repository = str(self.data.get("project", {}).get("repository") or "").strip()
-        return Path(repository) if repository else Path("roles") / self.role_slug()
+        return resolve_data_relative(repository) if repository else resolve_data_relative(Path("roles") / self.role_slug())
 
     def role_media_root(self):
         return self.role_repository_root() / "media"

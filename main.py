@@ -1,7 +1,8 @@
 import asyncio
+import signal
 import socket
 
-from src.app_context import create_app_context, set_app_context
+from src.app_context import close_app_context, create_app_context, set_app_context
 from src.eva import start_eva
 from src.horus_server import start_horus_server
 from src.services.app_config import AppConfig
@@ -54,12 +55,29 @@ async def main():
     check_ports_available()
     context = create_app_context()
     set_app_context(context)
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
 
-    await asyncio.gather(
-        start_web_server(context),
-        start_horus_server(context),
-        start_eva(context),
-    )
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(signum, stop_event.set)
+        except (NotImplementedError, RuntimeError):
+            pass
+
+    tasks = [
+        asyncio.create_task(start_web_server(context), name="eva-web"),
+        asyncio.create_task(start_horus_server(context), name="horus-web"),
+        asyncio.create_task(start_eva(context), name="eva-core"),
+    ]
+
+    try:
+        await stop_event.wait()
+    finally:
+        for task in tasks:
+            task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await close_app_context(context)
 
 
 if __name__ == "__main__":

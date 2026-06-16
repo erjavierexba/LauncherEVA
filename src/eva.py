@@ -443,7 +443,10 @@ async def start_eva(context):
                     continue
             await asyncio.sleep(0)
 
-            data, rms = q.get()
+            try:
+                data, rms = q.get(timeout=0.2)
+            except queue.Empty:
+                continue
 
             if is_speaking:
                 continue

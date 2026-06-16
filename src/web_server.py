@@ -13,6 +13,7 @@ from launcher_eva.web_app import render_page as render_launcher_page
 from src.commands.musica import MUSIC_MAP
 from src.domain.name_generator import FANTASY_RACE_LABELS, HUMAN_NAME_SETS, generate_names
 from src.domain.players import normalizar
+from src.services.app_paths import data_assets_root, open_in_file_manager, user_data_dir
 from src.services.network import get_base_url
 from src.ws_server import start_ws_loop, stop_ws_loop, websocket_handler
 
@@ -310,8 +311,31 @@ async def api_users_delete(request):
     })
 
 
+def safe_asset_path(root: Path, filename: str):
+    relative = Path(filename)
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+
+    candidate = root / relative
+    if candidate.exists() and candidate.is_file():
+        return candidate
+
+    return None
+
+
+async def asset_file(request):
+    filename = request.match_info["filename"]
+    for root in (data_assets_root(), WEB_ASSETS_PATH):
+        candidate = safe_asset_path(root, filename)
+        if candidate is not None:
+            return web.FileResponse(candidate, headers=no_store_headers())
+
+    raise web.HTTPNotFound()
+
+
 async def favicon(request):
-    return web.FileResponse(FAVICON_PATH)
+    custom = data_assets_root() / FAVICON_PATH.name
+    return web.FileResponse(custom if custom.exists() else FAVICON_PATH, headers=no_store_headers())
 
 
 async def index_css(request):
@@ -442,6 +466,15 @@ async def config_apply_release(request):
 async def config_client_reset(request):
     await api_client_reset(request)
     LAUNCHER_STATE.log("Reset enviado a la aplicación cliente.")
+    config_redirect()
+
+
+async def config_open_data_folder(request):
+    opened = open_in_file_manager(user_data_dir())
+    if opened:
+        LAUNCHER_STATE.log(f"Carpeta de datos abierta: {user_data_dir()}.")
+    else:
+        LAUNCHER_STATE.log(f"No pude abrir la carpeta automáticamente. Ruta: {user_data_dir()}.")
     config_redirect()
 
 
@@ -578,6 +611,7 @@ async def load_user_state(request):
 
     return web.json_response({
         "ok": True,
+        "role": request.app["context"].config.role_name(),
         "user": user,
         "template": db.character_templates.active_template(),
         "sheet": sheet,
@@ -1406,6 +1440,7 @@ async def start_web_server(context):
     app.router.add_post("/theme", config_theme)
     app.router.add_post("/theme/preset", config_theme_preset)
     app.router.add_post("/apply-release", config_apply_release)
+    app.router.add_post("/open-data-folder", config_open_data_folder)
     app.router.add_post("/client/reset", config_client_reset)
     app.router.add_post("/start-eva", config_start_eva)
     app.router.add_post("/stop-eva", config_stop_eva)
@@ -1461,7 +1496,7 @@ async def start_web_server(context):
     app.router.add_post("/api/music/control", control_music)
     context.media_catalog.media_root.mkdir(parents=True, exist_ok=True)
     app.router.add_get("/media/{filename:.*}", media_file)
-    app.router.add_static("/assets/", path=WEB_ASSETS_PATH, name="assets")
+    app.router.add_get("/assets/{filename:.*}", asset_file)
     app.router.add_static("/styles/", path=WEB_STYLES_PATH, name="styles")
 
     runner = web.AppRunner(app)
@@ -1473,7 +1508,10 @@ async def start_web_server(context):
     print(f"[WEB] Panel en http://localhost:{context.web_port}")
     print(f"[WEB] Media en http://localhost:{context.web_port}/media/")
 
-    await asyncio.Event().wait()
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
 
 
 def parse_aliases(value):

@@ -1,6 +1,8 @@
 from pathlib import Path
 import pygame
 
+from src.services.app_paths import code_root, data_assets_root
+
 VOLUME_INCREMENT = 0.15
 
 
@@ -16,7 +18,7 @@ class MusicService:
         pygame.mixer.music.set_volume(self.volume)
 
     def play(self, path: str, label: str | None = None, context: str | None = None, number: int | None = None):
-        file_path = Path(path)
+        file_path = self.resolve_path(path)
 
         if not file_path.exists():
             return {
@@ -139,3 +141,27 @@ class MusicService:
             "paused": self.paused,
             "volume": self.volume,
         }
+
+    def close(self):
+        try:
+            self.stop()
+        finally:
+            pygame.mixer.quit()
+
+    def resolve_path(self, path: str):
+        file_path = Path(path)
+        if file_path.exists() or file_path.is_absolute():
+            return file_path
+
+        parts = file_path.parts
+        if parts and parts[0] == "assets":
+            relative = Path(*parts[1:])
+            data_path = data_assets_root() / relative
+            if data_path.exists():
+                return data_path
+
+        bundled_path = code_root() / file_path
+        if bundled_path.exists():
+            return bundled_path
+
+        return file_path

@@ -69,3 +69,24 @@ def get_app_context() -> AppContext:
         raise RuntimeError("AppContext no inicializado.")
 
     return _context
+
+
+async def close_app_context(context: AppContext | None = None):
+    global _context
+
+    target = context or _context
+    if target is None:
+        return
+
+    try:
+        target.music_service.close()
+    except Exception:
+        pass
+
+    try:
+        target.db.close(backup=True)
+    except Exception:
+        pass
+
+    if target is _context:
+        _context = None

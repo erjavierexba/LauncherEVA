@@ -24,6 +24,17 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from src.services.network import get_base_url
+from src.services.app_paths import (
+    app_config_path,
+    code_root,
+    data_assets_root,
+    ensure_app_data_layout,
+    launcher_settings_path,
+    open_in_file_manager,
+    roles_root,
+    snapshots_root,
+    user_data_dir,
+)
 
 
 APP_TITLE = "Launcher EVA"
@@ -106,13 +117,11 @@ THEME_PRESETS = {
 
 
 def app_root() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[2]
+    return code_root()
 
 
 def runtime_assets_root() -> Path:
-    return app_root() / "assets"
+    return data_assets_root()
 
 
 def runtime_sqlite_path() -> Path:
@@ -120,6 +129,7 @@ def runtime_sqlite_path() -> Path:
 
 
 def ensure_runtime_layout() -> None:
+    ensure_app_data_layout()
     runtime_assets_root().mkdir(parents=True, exist_ok=True)
 
 
@@ -293,7 +303,7 @@ class LauncherState:
     def __init__(self):
         seed_bundled_projects()
         ensure_runtime_layout()
-        self.settings_path = app_root() / CONFIG_FILE
+        self.settings_path = launcher_settings_path()
         self.settings = default_settings()
         loaded = load_json(self.settings_path, {})
         if isinstance(loaded, dict):
@@ -330,15 +340,18 @@ class LauncherState:
         return app_root()
 
     def eva_config_path(self) -> Path:
-        return self.eva_path() / "config" / "eva.config.json"
+        return app_config_path()
 
     def media_root(self) -> Path:
         return self.role_repository_root() / "media"
 
     def role_repository_root(self) -> Path:
-        return app_root() / "roles" / app_slug(self.role_name())
+        return roles_root() / app_slug(self.role_name())
 
     def favicon_path(self) -> Path:
+        path = data_assets_root() / FAVICON_PATH.name
+        if path.exists():
+            return path
         return app_root() / FAVICON_PATH
 
     def aliases_path(self) -> Path:
@@ -396,10 +409,10 @@ class LauncherState:
         return (result.stdout or "").strip()
 
     def current_release_root(self) -> Path:
-        return app_root() / SNAPSHOT_ROOT / "current"
+        return snapshots_root() / "current"
 
     def timestamped_release_root(self) -> Path:
-        return app_root() / SNAPSHOT_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S")
+        return snapshots_root() / datetime.now().strftime("%Y%m%d-%H%M%S")
 
     def snapshot_ignore(self, directory: str, names: list[str]) -> set[str]:
         ignored = {
@@ -633,7 +646,7 @@ class LauncherState:
             self.log(f"Fondo no permitido: {extension}")
             return ""
 
-        assets_root = app_root() / "src" / "web" / "assets"
+        assets_root = data_assets_root()
         assets_root.mkdir(parents=True, exist_ok=True)
         for old_background in assets_root.glob("theme_background.*"):
             if old_background.is_file():
@@ -642,6 +655,13 @@ class LauncherState:
         destination = assets_root / f"theme_background{extension}"
         shutil.copyfile(upload_path, destination)
         return f"/assets/{destination.name}?v={int(time.time())}"
+
+    def open_data_folder(self) -> None:
+        opened = open_in_file_manager(user_data_dir())
+        if opened:
+            self.log(f"Carpeta de datos abierta: {user_data_dir()}.")
+        else:
+            self.log(f"No pude abrir la carpeta automáticamente. Ruta: {user_data_dir()}.")
 
     def apply_preset(self, preset: str) -> None:
         if preset not in THEME_PRESETS:
@@ -876,6 +896,8 @@ class Handler(BaseHTTPRequestHandler):
             STATE.apply_preset(form.get("preset", "eva"))
         elif path == "/apply-release":
             STATE.apply_release_configuration()
+        elif path == "/open-data-folder":
+            STATE.open_data_folder()
         elif path == "/prepare-workflow":
             background(STATE.prepare_public_release_workflow)
         elif path == "/build/horus":
@@ -1143,6 +1165,7 @@ def render_page() -> str:
       <form class="actions" method="post" action="/pull">
         <button name="target" value="both">Pull public_release</button>
       </form>
+      <form class="actions" method="post" action="/open-data-folder"><button>Abrir carpeta de datos</button></form>
       <form class="actions" method="post" action="/apply-release"><button>Reaplicar configuración</button></form>
       {reset_control}
       <form class="actions" method="post" action="/prepare-workflow"><button class="primary">Preparar workflow completo</button></form>
