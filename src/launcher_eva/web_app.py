@@ -1073,13 +1073,15 @@ def render_page() -> str:
     .file-preview-grid {{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }}
     .file-preview {{ position:relative; overflow:hidden; min-height:198px; display:grid; grid-template-rows:118px auto; border:1px solid #394554; border-radius:8px; background:#0c1016; }}
     .file-preview-media {{ position:relative; display:grid; place-items:center; min-width:0; min-height:0; background:#05070a; color:var(--muted); font-size:12px; font-weight:900; text-align:center; }}
-    .file-preview-media::after {{ content:""; position:absolute; inset:auto 0 0; height:58%; pointer-events:none; background:linear-gradient(180deg, rgba(5,7,10,0) 0%, rgba(5,7,10,.72) 68%, rgba(5,7,10,.96) 100%); }}
     .file-preview-media img, .file-preview-media video {{ width:100%; height:100%; object-fit:cover; display:block; }}
     .file-preview-media audio {{ width:calc(100% - 14px); }}
-    .file-preview-body {{ min-width:0; display:grid; gap:4px; padding:10px 9px 9px; background:linear-gradient(180deg, #121922 0%, #0c1016 42%); }}
+    .file-preview-caption {{ position:absolute; inset:auto 0 0 0; min-width:0; display:grid; gap:4px; padding:34px 10px 10px; isolation:isolate; }}
+    .file-preview-caption::before {{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none; background:linear-gradient(180deg, rgba(5,7,10,0) 0%, rgba(5,7,10,.18) 28%, rgba(5,7,10,.78) 72%, rgba(5,7,10,.96) 100%); }}
+    .file-preview-caption > * {{ position:relative; z-index:1; }}
+    .file-preview-body {{ min-width:0; display:grid; gap:7px; padding:10px 9px 9px; background:#0c1016; }}
     .file-preview-name {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:900; }}
     .file-preview-meta {{ color:var(--muted); font-size:12px; }}
-    .file-preview-fields {{ display:grid; gap:7px; margin-top:4px; }}
+    .file-preview-fields {{ display:grid; gap:7px; }}
     .file-preview-fields input {{ min-height:32px; padding:7px 8px; font-size:13px; }}
     .remove-file {{ position:absolute; top:7px; right:7px; width:30px; min-width:30px; min-height:30px; padding:0; border-color:#6d3b45; background:#3a151b; }}
     button, a.button {{ min-height:36px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #52667d; border-radius:6px; background:#1b2a38; color:var(--text); padding:8px 11px; text-decoration:none; font-weight:800; cursor:pointer; }}
@@ -1303,10 +1305,14 @@ def render_page() -> str:
       const safeType = escapeHtml(file.type || "archivo");
       const meta = selectedMediaMeta[index] || {{ name: "", aliases: "" }};
       card.innerHTML = `
-        <div class="file-preview-media">${{previewFor(file)}}</div>
+        <div class="file-preview-media">
+          ${{previewFor(file)}}
+          <div class="file-preview-caption">
+            <div class="file-preview-name" title="${{safeName}}">${{safeName}}</div>
+            <div class="file-preview-meta">${{safeType}} · ${{formatBytes(file.size)}}</div>
+          </div>
+        </div>
         <div class="file-preview-body">
-          <div class="file-preview-name" title="${{safeName}}">${{safeName}}</div>
-          <div class="file-preview-meta">${{safeType}} · ${{formatBytes(file.size)}}</div>
           <div class="file-preview-fields">
             <label>Nombre visible<input name="name_${{index}}" value="${{escapeHtml(meta.name)}}" placeholder="Nombre visible"></label>
             <label>Aliases<input name="aliases_${{index}}" value="${{escapeHtml(meta.aliases)}}" placeholder="alias 1, alias 2"></label>
