@@ -63,6 +63,22 @@ Crear paquete `.deb`:
 python3 scripts/build_deb.py
 ```
 
+### Builds con GitHub Actions
+
+El workflow `.github/workflows/build-packages.yml` genera:
+
+- `launcher-eva-deb`: paquete `.deb` construido en Ubuntu.
+- `launcher-eva-windows`: `LauncherEVA.exe` e instalador `LauncherEVA_Setup_*.exe` construidos en Windows.
+
+Puedes lanzarlo manualmente desde GitHub en `Actions` > `Build packages` > `Run workflow`.
+
+También se ejecuta al subir una etiqueta que empiece por `v`:
+
+```bash
+git tag v1.1
+git push origin v1.1
+```
+
 ## Configurador
 
 El configurador propio del launcher se arranca con:
